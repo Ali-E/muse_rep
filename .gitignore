@@ -7,6 +7,7 @@ internal
 data
 temp/*
 *.csv
+!matching_facts_combined.csv
 key.csv
 *.png
 *.txt
