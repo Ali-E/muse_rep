@@ -8,6 +8,7 @@ data
 temp/*
 *.csv
 !matching_facts_combined.csv
+!books_forget.csv
 key.csv
 *.png
 *.txt
