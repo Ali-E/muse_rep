@@ -1,0 +1,387 @@
+id,corruption,position,orig_token,alt_token,question_out,prefix,suffix,answer,avg_logprob,delta_from_clean,prompt_avg_nll_increase,generated_answer
+0,none,,,,Fudge represented the institution called the ___.,Fudge represented the institution called the ,.,Ministry of Magic,-0.8992191553115845,0.0,0.0,
+0,lm_single,2,udge,iled,Filed represented the institution called the ___.,Filed represented the institution called the ,.,Ministry of Magic,-2.3487401008605957,-1.4495209455490112,-0.1256728172302246,
+0,lm_single,2,udge,requently,Frequently represented the institution called the ___.,Frequently represented the institution called the ,.,Ministry of Magic,-2.108919143676758,-1.2096999883651733,-0.2512831687927246,
+0,lm_single,7, the," ""","Fudge represented the institution called "" ___.","Fudge represented the institution called "" ",.,Ministry of Magic,-2.0083351135253906,-1.1091159582138062,0.4858822822570801,
+0,lm_single,7, the, “,Fudge represented the institution called “ ___.,Fudge represented the institution called “ ,.,Ministry of Magic,-1.92422616481781,-1.0250070095062256,0.5943632125854492,"the 
+University of 
+California 
+at"
+0,lm_single,1,F,Q,Qudge represented the institution called the ___.,Qudge represented the institution called the ,.,Ministry of Magic,-1.6343469619750977,-0.7351278066635132,0.6800599098205566,
+0,lm_single,1,F,The,Theudge represented the institution called the ___.,Theudge represented the institution called the ,.,Ministry of Magic,-1.4729912281036377,-0.5737720727920532,0.536468505859375,"ʻAʻa, which was the name of"
+0,lm_single,6, called, as,Fudge represented the institution as the ___.,Fudge represented the institution as the ,.,Ministry of Magic,-1.2209174633026123,-0.32169830799102783,-0.3862490653991699,umpire of the game
+0,lm_single,3, represented,y,Fudgey the institution called the ___.,Fudgey the institution called the ,.,Ministry of Magic,-1.213020920753479,-0.31380176544189453,-0.16486310958862305,
+0,lm_single,3, represented,",","Fudge, the institution called the ___.","Fudge, the institution called the ",.,Ministry of Magic,-1.1712746620178223,-0.2720555067062378,-0.7849016189575195,
+0,lm_single,6, called, of,Fudge represented the institution of the ___.,Fudge represented the institution of the ,.,Ministry of Magic,-1.1615248918533325,-0.26230573654174805,-0.6427936553955078,"fudge, the institution of the fudge, the"
+0,lm_single,4, the, by,Fudge represented by institution called the ___.,Fudge represented by institution called the ,.,Ministry of Magic,-0.9977892637252808,-0.09857010841369629,0.18468666076660156,"Fudge Institute of the University of 
+California at"
+0,none,,,,The Minister of Magic's full name was ___.,The Minister of Magic's full name was ,.,Cornelius Fudge,-0.8743132591247559,0.0,0.0,"Majesty of the Sith, and he was"
+0,lm_single,4, Magic, Finance,The Minister of Finance's full name was ___.,The Minister of Finance's full name was ,.,Cornelius Fudge,-2.1327230453491213,-1.2584097862243655,-0.3559441566467285,
+0,lm_single,4, Magic, State,The Minister of State's full name was ___.,The Minister of State's full name was ,.,Cornelius Fudge,-1.8778532028198243,-1.0035399436950683,-0.0874338150024414,Karl-Heinz Schroeder
+0,lm_single,2, Minister, invention,The invention of Magic's full name was ___.,The invention of Magic's full name was ,.,Cornelius Fudge,-1.766580581665039,-0.8922673225402832,0.7498054504394531,魔法の魔法使い
+0,lm_single,2, Minister, effect,The effect of Magic's full name was ___.,The effect of Magic's full name was ,.,Cornelius Fudge,-1.7063810348510742,-0.8320677757263183,0.7357697486877441,魔法の魔法の�
+0,lm_single,3, of,ial,The Ministerial Magic's full name was ___.,The Ministerial Magic's full name was ,.,Cornelius Fudge,-1.6687421798706055,-0.7944289207458496,0.6710867881774902,
+0,lm_single,3, of, for,The Minister for Magic's full name was ___.,The Minister for Magic's full name was ,.,Cornelius Fudge,-1.2401148796081543,-0.36580162048339837,0.45062971115112305,
+0,lm_single,7, name, list,The Minister of Magic's full list was ___.,The Minister of Magic's full list was ,.,Cornelius Fudge,-1.179008388519287,-0.30469512939453114,0.7438926696777344,
+0,lm_single,8, was,",","The Minister of Magic's full name, ___.","The Minister of Magic's full name, ",.,Cornelius Fudge,-1.166599655151367,-0.2922863960266112,0.3828878402709961,"菲利普亞, is a common"
+0,lm_single,1,The,"
+","
+ Minister of Magic's full name was ___.","
+ Minister of Magic's full name was ",.,Cornelius Fudge,-1.1603118896484375,-0.2859986305236816,0.5475587844848633,"Majesty of the Sith
+
+The name"
+0,lm_single,5,'s,",","The Minister of Magic, full name was ___.","The Minister of Magic, full name was ",.,Cornelius Fudge,-1.1250345230102539,-0.250721263885498,0.608731746673584,"Majesty of the Sith,
+is the"
+1,none,,,,"According to Fudge, the fugitive was meeting up with 'You-____-Who.'","According to Fudge, the fugitive was meeting up with 'You-",-Who.',Know,-0.36776620149612427,0.0,0.0,Know-Who' in the woods
+1,lm_single,3, F, the,"According to theudge, the fugitive was meeting up with 'You-____-Who.'","According to theudge, the fugitive was meeting up with 'You-",-Who.',Know,-1.1348555088043213,-0.767089307308197,0.2823061943054199,Know-Who' in the woods of the state of New
+1,lm_single,10, meeting, a,"According to Fudge, the fugitive was a up with 'You-____-Who.'","According to Fudge, the fugitive was a up with 'You-",-Who.',Know,-1.1212337017059326,-0.7534675002098083,0.7915620803833008,Know-Who' and 'The Joker'
+1,lm_single,10, meeting, in,"According to Fudge, the fugitive was in up with 'You-____-Who.'","According to Fudge, the fugitive was in up with 'You-",-Who.',Know,-0.9366711974143982,-0.5689049959182739,0.5074272155761719,Know-Who' and 'The Joker'
+1,lm_single,3, F, a,"According to audge, the fugitive was meeting up with 'You-____-Who.'","According to audge, the fugitive was meeting up with 'You-",-Who.',Know,-0.9197404980659485,-0.5519742965698242,0.71405029296875,Know-Who' in the US
+1,lm_single,7, fug, new,"According to Fudge, the newitive was meeting up with 'You-____-Who.'","According to Fudge, the newitive was meeting up with 'You-",-Who.',Know,-0.8995879292488098,-0.5318217277526855,0.7404880523681641,Know-Who' in the woods
+1,lm_single,1,According,1,"1 to Fudge, the fugitive was meeting up with 'You-____-Who.'","1 to Fudge, the fugitive was meeting up with 'You-",-Who.',Know,-0.7193965315818787,-0.3516303300857544,0.7456321716308594,"Know-Who'
+
+1 to Fudge, the"
+1,lm_single,7, fug, reason,"According to Fudge, the reasonitive was meeting up with 'You-____-Who.'","According to Fudge, the reasonitive was meeting up with 'You-",-Who.',Know,-0.6897785067558289,-0.3220123052597046,0.6967592239379883,Know-Who' to discuss the 'Fudge' movie
+1,lm_single,5,",",’,According to Fudge’ the fugitive was meeting up with 'You-____-Who.',According to Fudge’ the fugitive was meeting up with 'You-,-Who.',Know,-0.5920279622077942,-0.22426176071166992,0.7690324783325195,Know-Who' in the woods
+1,lm_single,4,udge,am,"According to Fam, the fugitive was meeting up with 'You-____-Who.'","According to Fam, the fugitive was meeting up with 'You-",-Who.',Know,-0.5809518694877625,-0.21318566799163818,0.0477595329284668,Know-Who' in the woods of the state of New
+1,lm_single,8,itive,ly,"According to Fudge, the fugly was meeting up with 'You-____-Who.'","According to Fudge, the fugly was meeting up with 'You-",-Who.',Know,-0.5702940821647644,-0.20252788066864014,0.6287450790405273,Know-Who' in the woods
+1,lm_single,8,itive,itives,"According to Fudge, the fugitives was meeting up with 'You-____-Who.'","According to Fudge, the fugitives was meeting up with 'You-",-Who.',Know,-0.5303966999053955,-0.16263049840927124,0.3544740676879883,Know-Who' in the woods
+1,lm_single,4,udge,itch,"According to Fitch, the fugitive was meeting up with 'You-____-Who.'","According to Fitch, the fugitive was meeting up with 'You-",-Who.',Know,-0.46472853422164917,-0.0969623327255249,-0.004763603210449219,"Know-Who' in the US, and that he was"
+1,lm_single,6, the, he,"According to Fudge, he fugitive was meeting up with 'You-____-Who.'","According to Fudge, he fugitive was meeting up with 'You-",-Who.',Know,-0.45552560687065125,-0.08775940537452698,0.5108108520507812,Know-Who' in the woods
+2,none,,,,"Harry Potter's godfather, who was revealed to have been framed, is ________.","Harry Potter's godfather, who was revealed to have been framed, is ",.,Sirius Black,-0.534077525138855,0.0,0.0,"reunited with his son, who is now a"
+2,lm_single,2, Potter,'s,"Harry's's godfather, who was revealed to have been framed, is ________.","Harry's's godfather, who was revealed to have been framed, is ",.,Sirius Black,-1.628384272257487,-1.094306747118632,0.766646146774292,
+2,lm_single,2, Potter,",","Harry,'s godfather, who was revealed to have been framed, is ________.","Harry,'s godfather, who was revealed to have been framed, is ",.,Sirius Black,-1.402907371520996,-0.8688298463821411,0.6070430278778076,now in prison
+2,lm_single,3,'s, is,"Harry Potter is godfather, who was revealed to have been framed, is ________.","Harry Potter is godfather, who was revealed to have been framed, is ",.,Sirius Black,-1.265606164932251,-0.731528639793396,0.7322261333465576,"accused of murdering his own father, and is"
+2,lm_single,1,Harry,The,"The Potter's godfather, who was revealed to have been framed, is ________.","The Potter's godfather, who was revealed to have been framed, is ",.,Sirius Black,-1.0736053784688313,-0.5395278533299763,0.4175117015838623,
+2,lm_single,1,Harry,Q,"Q Potter's godfather, who was revealed to have been framed, is ________.","Q Potter's godfather, who was revealed to have been framed, is ",.,Sirius Black,-0.9980989297231039,-0.4640214045842489,0.7695949077606201,found dead in his cell
+2,lm_single,4, god, ',"Harry Potter's 'father, who was revealed to have been framed, is ________.","Harry Potter's 'father, who was revealed to have been framed, is ",.,Sirius Black,-0.8590081532796224,-0.32493062814076745,0.6216442584991455,reunited with his son after a long time apart
+2,lm_single,6,",",:,"Harry Potter's godfather: who was revealed to have been framed, is ________.","Harry Potter's godfather: who was revealed to have been framed, is ",.,Sirius Black,-0.8489762941996256,-0.31489876906077063,0.7762377262115479,"reunited with his son, and is now a"
+2,lm_single,8, was, died,"Harry Potter's godfather, who died revealed to have been framed, is ________.","Harry Potter's godfather, who died revealed to have been framed, is ",.,Sirius Black,-0.6749552885691324,-0.14087776343027747,0.6465046405792236,"reunited with his son, who is now a"
+2,lm_single,9, revealed, also,"Harry Potter's godfather, who was also to have been framed, is ________.","Harry Potter's godfather, who was also to have been framed, is ",.,Sirius Black,-0.6282608111699423,-0.09418328603108728,0.5471012592315674,found dead in his cell
+2,none,,,,Fudge's former position within the wizarding world was the ________.,Fudge's former position within the wizarding world was the ,.,Minister of Magic,-0.46944108605384827,0.0,0.0,headmaster of Hogwarts School of Witchcraft and
+2,lm_single,12, was, has,Fudge's former position within the wizarding world has the ________.,Fudge's former position within the wizarding world has the ,.,Minister of Magic,-1.8303555250167847,-1.3609144389629364,0.3204212188720703,icing on the cake
+2,lm_single,10,arding,ening,Fudge's former position within the wizening world was the ________.,Fudge's former position within the wizening world was the ,.,Minister of Magic,-1.3404635190963745,-0.8710224330425262,0.6633691787719727,icing on the cake
+2,lm_single,10,arding,ened,Fudge's former position within the wizened world was the ________.,Fudge's former position within the wizened world was the ,.,Minister of Magic,-1.1121827363967896,-0.6427416503429413,0.5720596313476562,icing on the cake
+2,lm_single,5, position, boss,Fudge's former boss within the wizarding world was the ________.,Fudge's former boss within the wizarding world was the ,.,Minister of Magic,-0.8548852801322937,-0.38544419407844543,0.1511845588684082,most powerful wizard in the world
+2,lm_single,5, position, partner,Fudge's former partner within the wizarding world was the ________.,Fudge's former partner within the wizarding world was the ,.,Minister of Magic,-0.8264588713645935,-0.35701778531074524,0.06403875350952148,famous Harry Potter author J
+2,lm_single,4, former, F,Fudge's F position within the wizarding world was the ________.,Fudge's F position within the wizarding world was the ,.,Minister of Magic,-0.804609477519989,-0.33516839146614075,0.767859935760498,most important position in the wizarding world
+2,lm_single,4, former,"
+","Fudge's
+ position within the wizarding world was the ________.","Fudge's
+ position within the wizarding world was the ",.,Minister of Magic,-0.6626441478729248,-0.19320306181907654,0.34022045135498047,most important thing to him
+2,lm_single,3,'s,y,Fudgey former position within the wizarding world was the ________.,Fudgey former position within the wizarding world was the ,.,Minister of Magic,-0.6471355557441711,-0.17769446969032288,0.7729735374450684,icing on the cake for the Harry Potter films
+2,lm_single,3,'s,",","Fudge, former position within the wizarding world was the ________.","Fudge, former position within the wizarding world was the ",.,Minister of Magic,-0.562995433807373,-0.09355434775352478,0.6470870971679688,icing on the cake
+3,none,,,,Who is the highly trained Auror assigned to protect the Prime Minister?,Who is the highly trained Auror assigned to protect the Prime Minister?,,Kingsley Shacklebolt,-4.1405165536063055,0.0,0.0,The highly trained Auror assigned to protect the Prime
+3,lm_single,6, Aur, doctor,Who is the highly trained doctoror assigned to protect the Prime Minister?,Who is the highly trained doctoror assigned to protect the Prime Minister?,,Kingsley Shacklebolt,-4.5899843488420755,-0.44946779523576996,0.7222886085510254,The Prime Minister is the most powerful person in the
+3,lm_single,6, Aur, police,Who is the highly trained policeor assigned to protect the Prime Minister?,Who is the highly trained policeor assigned to protect the Prime Minister?,,Kingsley Shacklebolt,-4.458593096051898,-0.318076542445592,0.7491016387939453,The Prime Minister is the most powerful person in the
+3,lm_single,7,or,iga,Who is the highly trained Auriga assigned to protect the Prime Minister?,Who is the highly trained Auriga assigned to protect the Prime Minister?,,Kingsley Shacklebolt,-4.440741947719029,-0.3002253941127231,0.7313313484191895,The Prime Minister is the highest ranking official in the
+3,lm_single,7,or,asma,Who is the highly trained Aurasma assigned to protect the Prime Minister?,Who is the highly trained Aurasma assigned to protect the Prime Minister?,,Kingsley Shacklebolt,-4.414202008928571,-0.2736854553222656,0.777829647064209,The Prime Minister is the most powerful person in the
+3,lm_single,4, highly, most,Who is the most trained Auror assigned to protect the Prime Minister?,Who is the most trained Auror assigned to protect the Prime Minister?,,Kingsley Shacklebolt,-4.294727052961077,-0.1542104993547717,0.38890838623046875,The most trained Auror assigned to protect the Prime
+3,lm_single,10, protect, investigate,Who is the highly trained Auror assigned to investigate the Prime Minister?,Who is the highly trained Auror assigned to investigate the Prime Minister?,,Kingsley Shacklebolt,-4.260001046316964,-0.11948449271065886,0.5343160629272461,The highly trained Auror assigned to investigate the Prime
+3,lm_single,2, is, are,Who are the highly trained Auror assigned to protect the Prime Minister?,Who are the highly trained Auror assigned to protect the Prime Minister?,,Kingsley Shacklebolt,-4.229516983032227,-0.08900042942592101,0.16132807731628418,The highly trained Auror assigned to protect the Prime
+3,lm_single,10, protect, the,Who is the highly trained Auror assigned to the the Prime Minister?,Who is the highly trained Auror assigned to the the Prime Minister?,,Kingsley Shacklebolt,-4.226478031703404,-0.08596147809709809,0.7983112335205078,The highly trained Auror assigned to the Prime Minister
+3,lm_single,5, trained, skilled,Who is the highly skilled Auror assigned to protect the Prime Minister?,Who is the highly skilled Auror assigned to protect the Prime Minister?,,Kingsley Shacklebolt,-4.2226265498570035,-0.08210999625069793,0.20208740234375,The highly skilled Auror assigned to protect the Prime
+4,none,,,,The sister of Narcissa who followed her through the rusty railings was ______.,The sister of Narcissa who followed her through the rusty railings was ,.,Bellatrix,-2.1396288871765137,0.0,0.0,suddenly seized with a fit of the gout
+4,lm_single,5,arc,ae,The sister of Naeissa who followed her through the rusty railings was ______.,The sister of Naeissa who followed her through the rusty railings was ,.,Bellatrix,-2.8650104999542236,-0.72538161277771,0.37234067916870117,apparently killed by a train
+4,lm_single,6,issa,iso,The sister of Narciso who followed her through the rusty railings was ______.,The sister of Narciso who followed her through the rusty railings was ,.,Bellatrix,-2.7357420921325684,-0.5961132049560547,0.10862159729003906,apparently a little too eager to get to the top
+4,lm_single,4, N, a,The sister of aarcissa who followed her through the rusty railings was ______.,The sister of aarcissa who followed her through the rusty railings was ,.,Bellatrix,-2.56563138961792,-0.42600250244140625,0.6583690643310547,suddenly struck by a sudden and violent attack of
+4,lm_single,7, who, M,The sister of Narcissa M followed her through the rusty railings was ______.,The sister of Narcissa M followed her through the rusty railings was ,.,Bellatrix,-2.527456045150757,-0.38782715797424316,0.5551900863647461,unable to get a good look at the girl
+4,lm_single,5,arc,ir,The sister of Nirissa who followed her through the rusty railings was ______.,The sister of Nirissa who followed her through the rusty railings was ,.,Bellatrix,-2.5199971199035645,-0.3803682327270508,0.34633636474609375,apparently killed by a train
+4,lm_single,4, N, the,The sister of thearcissa who followed her through the rusty railings was ______.,The sister of thearcissa who followed her through the rusty railings was ,.,Bellatrix,-2.5103769302368164,-0.37074804306030273,0.6120100021362305,ithis time the sister of thearcissa who followed her
+4,lm_single,6,issa,iss,The sister of Narciss who followed her through the rusty railings was ______.,The sister of Narciss who followed her through the rusty railings was ,.,Bellatrix,-2.494051218032837,-0.35442233085632324,-0.026615142822265625,"sitting in the car, waiting for her to come"
+4,lm_single,2, sister, present,The present of Narcissa who followed her through the rusty railings was ______.,The present of Narcissa who followed her through the rusty railings was ,.,Bellatrix,-2.439450979232788,-0.2998220920562744,0.31240320205688477,a little more than a year old
+4,lm_single,10, through, sister,The sister of Narcissa who followed her sister the rusty railings was ______.,The sister of Narcissa who followed her sister the rusty railings was ,.,Bellatrix,-2.3205366134643555,-0.1809077262878418,0.6152944564819336,the first to see the light
+4,lm_single,1,The,"
+","
+ sister of Narcissa who followed her through the rusty railings was ______.","
+ sister of Narcissa who followed her through the rusty railings was ",.,Bellatrix,-2.2651219367980957,-0.12549304962158203,0.5715160369873047,the one who was killed
+4,lm_single,2, sister, invention,The invention of Narcissa who followed her through the rusty railings was ______.,The invention of Narcissa who followed her through the rusty railings was ,.,Bellatrix,-2.228316068649292,-0.08868718147277832,0.5052838325500488,a great success
+5,none,,,,"Whom did Snape claim had been attempting to steal the Sorcerer's Stone, requiring his sabotage?","Whom did Snape claim had been attempting to steal the Sorcerer's Stone, requiring his sabotage?",,Quirrell,-4.959719340006511,0.0,0.0,A
+5,lm_single,5,na,es,"Whom did Sespe claim had been attempting to steal the Sorcerer's Stone, requiring his sabotage?","Whom did Sespe claim had been attempting to steal the Sorcerer's Stone, requiring his sabotage?",,Quirrell,-5.9491227467854815,-0.9894034067789708,0.6962835788726807,The Sorcerer's Stone was stolen by the
+5,lm_single,6,pe,ith,"Whom did Snaith claim had been attempting to steal the Sorcerer's Stone, requiring his sabotage?","Whom did Snaith claim had been attempting to steal the Sorcerer's Stone, requiring his sabotage?",,Quirrell,-5.944433212280273,-0.9847138722737627,0.4193289279937744,The Sorcerer's Stone was stolen by the
+5,lm_single,6,pe,res,"Whom did Snares claim had been attempting to steal the Sorcerer's Stone, requiring his sabotage?","Whom did Snares claim had been attempting to steal the Sorcerer's Stone, requiring his sabotage?",,Quirrell,-5.899166742960612,-0.9394474029541016,0.6404917240142822,The Sorcerer's Stone was stolen by the
+5,lm_single,5,na,ly,"Whom did Slype claim had been attempting to steal the Sorcerer's Stone, requiring his sabotage?","Whom did Slype claim had been attempting to steal the Sorcerer's Stone, requiring his sabotage?",,Quirrell,-5.777804692586263,-0.818085352579752,0.5644795894622803,Slype
+5,lm_single,4, S, The,"Whom did Thenape claim had been attempting to steal the Sorcerer's Stone, requiring his sabotage?","Whom did Thenape claim had been attempting to steal the Sorcerer's Stone, requiring his sabotage?",,Quirrell,-5.718557357788086,-0.7588380177815752,0.7484762668609619,Thenape
+5,lm_single,4, S, K,"Whom did Knape claim had been attempting to steal the Sorcerer's Stone, requiring his sabotage?","Whom did Knape claim had been attempting to steal the Sorcerer's Stone, requiring his sabotage?",,Quirrell,-5.681934356689453,-0.7222150166829424,0.3517320156097412,The Sorcerer's Stone was stolen by the
+5,lm_single,2,om,is,"Whis did Snape claim had been attempting to steal the Sorcerer's Stone, requiring his sabotage?","Whis did Snape claim had been attempting to steal the Sorcerer's Stone, requiring his sabotage?",,Quirrell,-5.245175043741862,-0.28545570373535156,0.5715391635894775,I'm not sure if this is a spoiler
+5,lm_single,1,Wh,B,"Bom did Snape claim had been attempting to steal the Sorcerer's Stone, requiring his sabotage?","Bom did Snape claim had been attempting to steal the Sorcerer's Stone, requiring his sabotage?",,Quirrell,-5.089050928751628,-0.1293315887451172,0.6785862445831299,I'm not sure if this is a spoiler
+5,lm_single,9, been, killed,"Whom did Snape claim had killed attempting to steal the Sorcerer's Stone, requiring his sabotage?","Whom did Snape claim had killed attempting to steal the Sorcerer's Stone, requiring his sabotage?",,Quirrell,-5.0458526611328125,-0.08613332112630179,0.34949517250061035,The answer is
+6,none,,,,Snape admits Dumbledore's protection kept him out of ______.,Snape admits Dumbledore's protection kept him out of ,.,Azkaban,-0.7136055628458658,0.0,0.0,"the war
+
+By
+
+Jennifer D"
+6,lm_single,10, kept, of,Snape admits Dumbledore's protection of him out of ______.,Snape admits Dumbledore's protection of him out of ,.,Azkaban,-0.834575891494751,-0.12097032864888513,0.06834936141967773,"ire for the Death Eaters
+
+Snape admits"
+6,lm_single,9, protection, death,Snape admits Dumbledore's death kept him out of ______.,Snape admits Dumbledore's death kept him out of ,.,Azkaban,-0.8230403264363607,-0.10943476359049487,-0.48107385635375977,"the war
+
+By
+
+Jennifer D"
+6,lm_single,9, protection, plan,Snape admits Dumbledore's plan kept him out of ______.,Snape admits Dumbledore's plan kept him out of ,.,Azkaban,-0.8189380168914795,-0.10533245404561364,-0.2736215591430664,"the war
+
+By
+
+Jennifer D"
+6,lm_single,12, out, from,Snape admits Dumbledore's protection kept him from of ______.,Snape admits Dumbledore's protection kept him from of ,.,Azkaban,-0.8155210018157959,-0.10191543896993005,0.6451396942138672,"the Order of the Phoenix
+
+Harry Potter and the"
+7,none,,,,The vow Snape made in case Draco failed was called the ________.,The vow Snape made in case Draco failed was called the ,.,Unbreakable Vow,-0.2659590721130371,0.0,0.0,
+7,lm_single,2, vow, present,The present Snape made in case Draco failed was called the ________.,The present Snape made in case Draco failed was called the ,.,Unbreakable Vow,-2.3706302642822266,-2.1046711921691896,0.3704814910888672,
+7,lm_single,2, vow, invention,The invention Snape made in case Draco failed was called the ________.,The invention Snape made in case Draco failed was called the ,.,Unbreakable Vow,-1.6694156646728515,-1.4034565925598144,0.1625347137451172,
+7,lm_single,1,The,"
+","
+ vow Snape made in case Draco failed was called the ________.","
+ vow Snape made in case Draco failed was called the ",.,Unbreakable Vow,-0.9472814559936523,-0.6813223838806153,0.751671314239502,
+7,lm_single,5,pe,res,The vow Snares made in case Draco failed was called the ________.,The vow Snares made in case Draco failed was called the ,.,Unbreakable Vow,-0.5882597923278808,-0.32230072021484374,0.5589146614074707,
+7,lm_single,11, failed,'s,The vow Snape made in case Draco's was called the ________.,The vow Snape made in case Draco's was called the ,.,Unbreakable Vow,-0.5852635860443115,-0.3193045139312744,0.011237144470214844,
+7,lm_single,4,na,ole,The vow Solepe made in case Draco failed was called the ________.,The vow Solepe made in case Draco failed was called the ,.,Unbreakable Vow,-0.5732630729675293,-0.3073040008544922,0.7782368659973145,
+7,lm_single,5,pe,ith,The vow Snaith made in case Draco failed was called the ________.,The vow Snaith made in case Draco failed was called the ,.,Unbreakable Vow,-0.5599979877471923,-0.29403891563415524,0.48208189010620117,
+7,lm_single,4,na,es,The vow Sespe made in case Draco failed was called the ________.,The vow Sespe made in case Draco failed was called the ,.,Unbreakable Vow,-0.5379050731658935,-0.27194600105285643,0.7006926536560059,
+7,lm_single,1,The,A,A vow Snape made in case Draco failed was called the ________.,A vow Snape made in case Draco failed was called the ,.,Unbreakable Vow,-0.4099575519561768,-0.14399847984313968,0.05533552169799805,
+7,none,,,,The name of Narcissa and Bellatrix's sister not in the vow scene is ________.,The name of Narcissa and Bellatrix's sister not in the vow scene is ,.,Andromeda,-0.37350956598917645,0.0,0.0,
+7,lm_single,2, name, invention,The invention of Narcissa and Bellatrix's sister not in the vow scene is ________.,The invention of Narcissa and Bellatrix's sister not in the vow scene is ,.,Andromeda,-0.7196551958719889,-0.34614562988281244,0.39275360107421875,the first time that the name of the sister is used
+7,lm_single,8, Bell, the,The name of Narcissa and theatrix's sister not in the vow scene is ________.,The name of Narcissa and theatrix's sister not in the vow scene is ,.,Andromeda,-0.6860855420430502,-0.3125759760538737,0.7144207954406738,"Narcissa, the daughter of the king of Maced"
+7,lm_single,2, name, present,The present of Narcissa and Bellatrix's sister not in the vow scene is ________.,The present of Narcissa and Bellatrix's sister not in the vow scene is ,.,Andromeda,-0.6627609729766846,-0.2892514069875081,0.3440394401550293,confirmed by the fact that the scene is not in the
+7,lm_single,3, of, and,The name and Narcissa and Bellatrix's sister not in the vow scene is ________.,The name and Narcissa and Bellatrix's sister not in the vow scene is ,.,Andromeda,-0.6286848783493042,-0.25517531236012775,0.7161040306091309,
+7,lm_single,5,arc,ir,The name of Nirissa and Bellatrix's sister not in the vow scene is ________.,The name of Nirissa and Bellatrix's sister not in the vow scene is ,.,Andromeda,-0.622859517733256,-0.24934995174407953,0.6496982574462891,
+7,lm_single,6,issa,isse,The name of Narcisse and Bellatrix's sister not in the vow scene is ________.,The name of Narcisse and Bellatrix's sister not in the vow scene is ,.,Andromeda,-0.5821432669957479,-0.20863370100657147,0.2512369155883789,
+7,lm_single,4, N, J,The name of Jarcissa and Bellatrix's sister not in the vow scene is ________.,The name of Jarcissa and Bellatrix's sister not in the vow scene is ,.,Andromeda,-0.5681335926055908,-0.19462402661641437,0.6756596565246582,
+7,lm_single,8, Bell, her,The name of Narcissa and heratrix's sister not in the vow scene is ________.,The name of Narcissa and heratrix's sister not in the vow scene is ,.,Andromeda,-0.5395082632700602,-0.16599869728088373,0.49130725860595703,"Narcissa, the daughter of the king of Maced"
+7,lm_single,6,issa,iss,The name of Narciss and Bellatrix's sister not in the vow scene is ________.,The name of Narciss and Bellatrix's sister not in the vow scene is ,.,Andromeda,-0.5391662120819092,-0.16565664609273273,0.31598854064941406,
+7,lm_single,4, N, T,The name of Tarcissa and Bellatrix's sister not in the vow scene is ________.,The name of Tarcissa and Bellatrix's sister not in the vow scene is ,.,Andromeda,-0.4872084856033325,-0.11369891961415607,0.41632843017578125,
+7,lm_single,7, and, M,The name of Narcissa M Bellatrix's sister not in the vow scene is ________.,The name of Narcissa M Bellatrix's sister not in the vow scene is ,.,Andromeda,-0.47784396012624103,-0.10433439413706458,0.4190554618835449,
+7,lm_single,10,'s,",","The name of Narcissa and Bellatrix, sister not in the vow scene is ________.","The name of Narcissa and Bellatrix, sister not in the vow scene is ",.,Andromeda,-0.4738582770029704,-0.10034871101379395,0.3674297332763672,
+7,lm_single,5,arc,.,The name of N.issa and Bellatrix's sister not in the vow scene is ________.,The name of N.issa and Bellatrix's sister not in the vow scene is ,.,Andromeda,-0.47298089663187665,-0.0994713306427002,0.6852254867553711,
+7,lm_single,9,atrix,amy,The name of Narcissa and Bellamy's sister not in the vow scene is ________.,The name of Narcissa and Bellamy's sister not in the vow scene is ,.,Andromeda,-0.46133657296498615,-0.0878270069758097,-0.06862401962280273,
+7,lm_single,1,The,1,1 name of Narcissa and Bellatrix's sister not in the vow scene is ________.,1 name of Narcissa and Bellatrix's sister not in the vow scene is ,.,Andromeda,-0.45867645740509033,-0.08516689141591388,0.5150909423828125,"Narcissa and Bellatrix's sister, who is"
+7,none,,,,The name of the owl in Harry's room is ________.,The name of the owl in Harry's room is ,.,Hedwig,-0.2854936520258586,0.0,0.0,オウム
+7,lm_single,8, Harry, the,The name of the owl in the's room is ________.,The name of the owl in the's room is ,.,Hedwig,-0.7840781211853027,-0.49858446915944415,0.4917607307434082,
+7,lm_single,2, name, use,The use of the owl in Harry's room is ________.,The use of the owl in Harry's room is ,.,Hedwig,-0.7747672398885092,-0.48927358786265057,0.6899199485778809,a little bit different than the owl in the
+7,lm_single,8, Harry, this,The name of the owl in this's room is ________.,The name of the owl in this's room is ,.,Hedwig,-0.6656980514526367,-0.38020439942677814,0.4130077362060547,"オウガ, which is a Japanese name for the"
+7,lm_single,2, name, role,The role of the owl in Harry's room is ________.,The role of the owl in Harry's room is ,.,Hedwig,-0.4831579923629761,-0.1976643403371175,0.7003450393676758,to be the owl
+7,lm_single,7, in, and,The name of the owl and Harry's room is ________.,The name of the owl and Harry's room is ,.,Hedwig,-0.45789893468221027,-0.1724052826563517,0.5880203247070312,
+7,lm_single,4, the, this,The name of this owl in Harry's room is ________.,The name of this owl in Harry's room is ,.,Hedwig,-0.42801837126413983,-0.14252471923828125,0.2413034439086914,オウルフ
+7,lm_single,1,The,1,1 name of the owl in Harry's room is ________.,1 name of the owl in Harry's room is ,.,Hedwig,-0.40866907437642414,-0.12317542235056556,0.7634930610656738,
+7,lm_single,9,'s,s,The name of the owl in Harrys room is ________.,The name of the owl in Harrys room is ,.,Hedwig,-0.39856712023417157,-0.11307346820831299,0.5928797721862793,オウム
+7,lm_single,3, of, and,The name and the owl in Harry's room is ________.,The name and the owl in Harry's room is ,.,Hedwig,-0.3811769088109334,-0.09568325678507483,0.7984457015991211,a reference to the owl in the poem
+7,none,,,,The term used for Harry Potter in Ministry speculation is 'the ________'.,The term used for Harry Potter in Ministry speculation is 'the ,'.,Chosen One,-0.4092361529668172,0.0,0.0,urn
+7,lm_single,2, term, invention,The invention used for Harry Potter in Ministry speculation is 'the ________'.,The invention used for Harry Potter in Ministry speculation is 'the ,'.,Chosen One,-1.1902559598286946,-0.7810198068618774,0.7511401176452637,urn' from the Harry Potter series
+7,lm_single,10, is,.,The term used for Harry Potter in Ministry speculation. 'the ________'.,The term used for Harry Potter in Ministry speculation. 'the ,'.,Chosen One,-0.975111166636149,-0.5658750136693318,0.5884561538696289,Potter' is a term used to describe the character
+7,lm_single,7, in, is,The term used for Harry Potter is Ministry speculation is 'the ________'.,The term used for Harry Potter is Ministry speculation is 'the ,'.,Chosen One,-0.8106904029846191,-0.40145425001780194,0.36762571334838867,"most important thing in the world'
+
+The term"
+7,lm_single,10, is,:,The term used for Harry Potter in Ministry speculation: 'the ________'.,The term used for Harry Potter in Ministry speculation: 'the ,'.,Chosen One,-0.7505677541097006,-0.34133160114288336,0.16997861862182617,"urn'
+
+The term used for Harry Potter in Ministry"
+7,lm_single,5, Harry, the,The term used for the Potter in Ministry speculation is 'the ________'.,The term used for the Potter in Ministry speculation is 'the ,'.,Chosen One,-0.6977998415629069,-0.28856368859608966,0.23826980590820312,Potter
+7,lm_single,6, Potter,'s,The term used for Harry's in Ministry speculation is 'the ________'.,The term used for Harry's in Ministry speculation is 'the ,'.,Chosen One,-0.6815454165140787,-0.27230926354726154,0.39354944229125977,unofficial name for the character
+7,lm_single,2, term, role,The role used for Harry Potter in Ministry speculation is 'the ________'.,The role used for Harry Potter in Ministry speculation is 'the ,'.,Chosen One,-0.6625167528788248,-0.25328059991200763,0.5465798377990723,"most important role in the ministry'
+
+The role"
+7,lm_single,7, in,'s,The term used for Harry Potter's Ministry speculation is 'the ________'.,The term used for Harry Potter's Ministry speculation is 'the ,'.,Chosen One,-0.6301560799280802,-0.220919926961263,-0.17952966690063477,Potterverse
+7,lm_single,5, Harry, this,The term used for this Potter in Ministry speculation is 'the ________'.,The term used for this Potter in Ministry speculation is 'the ,'.,Chosen One,-0.5948283672332764,-0.18559221426645917,0.26174116134643555,Potter
+7,lm_single,1,The,1,1 term used for Harry Potter in Ministry speculation is 'the ________'.,1 term used for Harry Potter in Ministry speculation is 'the ,'.,Chosen One,-0.5936594009399414,-0.1844232479731242,0.7487154006958008,"urn'
+
+The Ministry of Magic is in the process"
+7,lm_single,3, used, in,The term in for Harry Potter in Ministry speculation is 'the ________'.,The term in for Harry Potter in Ministry speculation is 'the ,'.,Chosen One,-0.5438384612401327,-0.13460230827331549,0.7891216278076172,"most likely'
+
+The term in for Harry Potter"
+7,lm_single,6, Potter, and,The term used for Harry and in Ministry speculation is 'the ________'.,The term used for Harry and in Ministry speculation is 'the ,'.,Chosen One,-0.5357145468393961,-0.12647839387257892,0.3934440612792969,man
+7,lm_single,9, speculation, of,The term used for Harry Potter in Ministry of is 'the ________'.,The term used for Harry Potter in Ministry of is 'the ,'.,Chosen One,-0.4919600486755371,-0.08272389570871991,-0.02763080596923828,Wizarding World
+7,none,,,,The previous Minister of Magic before Rufus Scrimgeour was ________.,The previous Minister of Magic before Rufus Scrimgeour was ,.,Cornelius Fudge,-0.7665570259094239,0.0,0.0,the Minister of Magic
+7,lm_single,3, Minister, post,The previous post of Magic before Rufus Scrimgeour was ________.,The previous post of Magic before Rufus Scrimgeour was ,.,Cornelius Fudge,-1.5177635192871093,-0.7512064933776854,0.3768138885498047,a little bit of a mess
+7,lm_single,4, of,ial,The previous Ministerial Magic before Rufus Scrimgeour was ________.,The previous Ministerial Magic before Rufus Scrimgeour was ,.,Cornelius Fudge,-1.476511573791504,-0.7099545478820801,0.7535357475280762,the following
+7,lm_single,5, Magic, the,The previous Minister of the before Rufus Scrimgeour was ________.,The previous Minister of the before Rufus Scrimgeour was ,.,Cornelius Fudge,-1.459486961364746,-0.6929299354553222,0.6574001312255859,the Minister of the Department of the Interior
+7,lm_single,2, previous, invention,The invention Minister of Magic before Rufus Scrimgeour was ________.,The invention Minister of Magic before Rufus Scrimgeour was ,.,Cornelius Fudge,-1.4250147819519043,-0.6584577560424805,0.6546540260314941,a great wizard
+7,lm_single,5, Magic, State,The previous Minister of State before Rufus Scrimgeour was ________.,The previous Minister of State before Rufus Scrimgeour was ,.,Cornelius Fudge,-1.4225618362426757,-0.6560048103332519,0.532465934753418,the Minister of State for the Environment
+7,lm_single,3, Minister, section,The previous section of Magic before Rufus Scrimgeour was ________.,The previous section of Magic before Rufus Scrimgeour was ,.,Cornelius Fudge,-1.3390963554382325,-0.5725393295288086,0.4600248336791992,a little bit more complicated
+7,lm_single,4, of, for,The previous Minister for Magic before Rufus Scrimgeour was ________.,The previous Minister for Magic before Rufus Scrimgeour was ,.,Cornelius Fudge,-1.1977210998535157,-0.43116407394409184,0.2590904235839844,the Minister for Magic
+7,lm_single,6, before,",","The previous Minister of Magic, Rufus Scrimgeour was ________.","The previous Minister of Magic, Rufus Scrimgeour was ",.,Cornelius Fudge,-1.1630681991577148,-0.3965111732482909,-0.4027261734008789,a very good Minister of Magic
+7,lm_single,1,The,#,# previous Minister of Magic before Rufus Scrimgeour was ________.,# previous Minister of Magic before Rufus Scrimgeour was ,.,Cornelius Fudge,-1.134395694732666,-0.36783866882324223,0.7540712356567383,# the Minister of Magic
+7,lm_single,12,ge,s,The previous Minister of Magic before Rufus Scrimsour was ________.,The previous Minister of Magic before Rufus Scrimsour was ,.,Cornelius Fudge,-1.0666627883911133,-0.3001057624816894,0.6315522193908691,the Minister of Magic
+7,lm_single,12,ge,m,The previous Minister of Magic before Rufus Scrimmour was ________.,The previous Minister of Magic before Rufus Scrimmour was ,.,Cornelius Fudge,-0.9624357223510742,-0.19587869644165035,0.6133451461791992,the Minister of Magic
+7,lm_single,9,us,uss,The previous Minister of Magic before Rufuss Scrimgeour was ________.,The previous Minister of Magic before Rufuss Scrimgeour was ,.,Cornelius Fudge,-0.9504494667053223,-0.1838924407958984,0.7230515480041504,the Minister of Magic for the Kingdom of the Silver River
+7,lm_single,9,us,io,The previous Minister of Magic before Rufio Scrimgeour was ________.,The previous Minister of Magic before Rufio Scrimgeour was ,.,Cornelius Fudge,-0.9311556816101074,-0.16459865570068355,0.6222796440124512,the Minister of Magic
+7,lm_single,7, R, D,The previous Minister of Magic before Dufus Scrimgeour was ________.,The previous Minister of Magic before Dufus Scrimgeour was ,.,Cornelius Fudge,-0.9115353584289551,-0.14497833251953118,0.794867992401123,the Minister of Magic
+7,lm_single,8,uf,iddle,The previous Minister of Magic before Riddleus Scrimgeour was ________.,The previous Minister of Magic before Riddleus Scrimgeour was ,.,Cornelius Fudge,-0.8787987709045411,-0.11224174499511719,0.7445392608642578,Minister of Magic
+7,lm_single,6, before, and,The previous Minister of Magic and Rufus Scrimgeour was ________.,The previous Minister of Magic and Rufus Scrimgeour was ,.,Cornelius Fudge,-0.8766681671142578,-0.1101111412048339,-0.08163976669311523,a very good Minister of Magic
+7,lm_single,1,The,A,A previous Minister of Magic before Rufus Scrimgeour was ________.,A previous Minister of Magic before Rufus Scrimgeour was ,.,Cornelius Fudge,-0.8633369445800781,-0.09677991867065427,0.09736776351928711,the Minister of Magic
+7,lm_single,7, R, G,The previous Minister of Magic before Gufus Scrimgeour was ________.,The previous Minister of Magic before Gufus Scrimgeour was ,.,Cornelius Fudge,-0.850684928894043,-0.08412790298461914,0.7964868545532227,the Minister of Magic
+8,none,,,,Hedwig's cage is shut as Harry notices darkness outside called what? 'Sudden ______'.,Hedwig's cage is shut as Harry notices darkness outside called what? 'Sudden ,'.,darkness,-1.18466317653656,0.0,0.0,"darkness'
+
+Harry Potter and the Deathly"
+8,lm_single,10, notices, Potter,Hedwig's cage is shut as Harry Potter darkness outside called what? 'Sudden ______'.,Hedwig's cage is shut as Harry Potter darkness outside called what? 'Sudden ,'.,darkness,-1.5670467615127563,-0.3823835849761963,0.2278428077697754,"ire'
+
+Harry Potter and the Deathly Hallows"
+8,lm_single,1,H,Q,Qedwig's cage is shut as Harry notices darkness outside called what? 'Sudden ______'.,Qedwig's cage is shut as Harry notices darkness outside called what? 'Sudden ,'.,darkness,-1.3305668830871582,-0.14590370655059814,0.5670523643493652,"darkness'
+
+By
+
+Published"
+8,lm_single,10, notices, and,Hedwig's cage is shut as Harry and darkness outside called what? 'Sudden ______'.,Hedwig's cage is shut as Harry and darkness outside called what? 'Sudden ,'.,darkness,-1.3209253549575806,-0.1362621784210205,0.2625732421875,"death'
+
+Harry Potter and the Deathly Hall"
+8,none,,,,What is the full name of the Hogwarts headmaster? Albus ______.,What is the full name of the Hogwarts headmaster? Albus ,.,Dumbledore,-0.405786395072937,0.0,0.0,Dumbledore
+8,lm_single,5, name, story,What is the full story of the Hogwarts headmaster? Albus ______.,What is the full story of the Hogwarts headmaster? Albus ,.,Dumbledore,-1.0699142615000408,-0.6641278664271038,0.6671209335327148,"Dumbledore, the most famous wizard of all time"
+8,lm_single,3, the, your,What is your full name of the Hogwarts headmaster? Albus ______.,What is your full name of the Hogwarts headmaster? Albus ,.,Dumbledore,-0.8032614390055338,-0.3974750439325968,0.6822080612182617,"Dumbledore
+
+What is your full name of"
+8,lm_single,5, name, list,What is the full list of the Hogwarts headmaster? Albus ______.,What is the full list of the Hogwarts headmaster? Albus ,.,Dumbledore,-0.7538130283355713,-0.3480266332626343,0.5130314826965332,"Dumbledore, the headmaster of Hogwarts"
+8,lm_single,4, full, best,What is the best name of the Hogwarts headmaster? Albus ______.,What is the best name of the Hogwarts headmaster? Albus ,.,Dumbledore,-0.6540867884953817,-0.2483003934224447,0.3648111820220947,Dumbledore
+8,lm_single,7, the, your,What is the full name of your Hogwarts headmaster? Albus ______.,What is the full name of your Hogwarts headmaster? Albus ,.,Dumbledore,-0.6291859149932861,-0.22339951992034912,0.20452165603637695,Dumbledore
+8,lm_single,6, of, and,What is the full name and the Hogwarts headmaster? Albus ______.,What is the full name and the Hogwarts headmaster? Albus ,.,Dumbledore,-0.5654520193735758,-0.1596656243006388,0.6717228889465332,Dumbledore
+8,lm_single,4, full, next,What is the next name of the Hogwarts headmaster? Albus ______.,What is the next name of the Hogwarts headmaster? Albus ,.,Dumbledore,-0.5565412044525146,-0.15075480937957764,0.41312217712402344,Dumbledore
+8,lm_single,1,What,This,This is the full name of the Hogwarts headmaster? Albus ______.,This is the full name of the Hogwarts headmaster? Albus ,.,Dumbledore,-0.5140616099039713,-0.1082752148310343,0.5970249176025391,Dumbledore
+8,lm_single,3, the, The,What is The full name of the Hogwarts headmaster? Albus ______.,What is The full name of the Hogwarts headmaster? Albus ,.,Dumbledore,-0.4876644213994344,-0.08187802632649738,0.695744514465332,Dumbledore
+8,none,,,,Uncle Vernon is wearing a puce dressing ______.,Uncle Vernon is wearing a puce dressing ,.,gown,-0.959014356136322,0.0,0.0,and a black tie
+8,lm_single,5, wearing, the,Uncle Vernon is the a puce dressing ______.,Uncle Vernon is the a puce dressing ,.,gown,-1.2719676494598389,-0.31295329332351685,0.4281578063964844,"that is used to dress the 
+skin of the"
+8,lm_single,5, wearing, a,Uncle Vernon is a a puce dressing ______.,Uncle Vernon is a a puce dressing ,.,gown,-1.2383674383163452,-0.2793530821800232,0.4232673645019531,"that is made from the 
+fruits of"
+8,lm_single,4, is,"
+","Uncle Vernon
+ wearing a puce dressing ______.","Uncle Vernon
+ wearing a puce dressing ",.,gown,-1.2184029817581177,-0.25938862562179565,0.7037010192871094,"and a black tie
+and a black suit
+and"
+8,lm_single,9, dressing,-,Uncle Vernon is wearing a puce- ______.,Uncle Vernon is wearing a puce- ,.,gown,-1.1596338748931885,-0.20061951875686646,-0.22954750061035156,"ermine suit, and he is sitting on a chair"
+8,lm_single,9, dressing, suit,Uncle Vernon is wearing a puce suit ______.,Uncle Vernon is wearing a puce suit ,.,gown,-1.053971290588379,-0.09495693445205688,-0.7040724754333496,and a black tie
+8,none,,,,What is the name of the Dursley's son? ______.,What is the name of the Dursley's son? ,.,Dudley,-0.7638937632242838,0.0,0.0,"Harry Potter and the Goblet of Fire
+
+Harry"
+8,lm_single,12,?, that,What is the name of the Dursley's son that ______.,What is the name of the Dursley's son that ,.,Dudley,-3.158241589864095,-2.3943478266398115,0.41186046600341797,is the son of the Dursley's daughter
+8,lm_single,4, name, value,What is the value of the Dursley's son? ______.,What is the value of the Dursley's son? ,.,Dudley,-1.2997979323069255,-0.5359041690826417,0.5282342433929443,The value of the Dursley's son is the
+8,lm_single,4, name, meaning,What is the meaning of the Dursley's son? ______.,What is the meaning of the Dursley's son? ,.,Dudley,-1.2540570894877117,-0.49016332626342785,0.6014540195465088,The meaning of the Dursley's son is that
+8,lm_single,11, son, house,What is the name of the Dursley's house? ______.,What is the name of the Dursley's house? ,.,Dudley,-1.2243560949961345,-0.4604623317718507,-0.001674652099609375,"Harry Potter and the Chamber of Secrets
+
+Harry"
+8,lm_single,9,ley,ch,What is the name of the Dursch's son? ______.,What is the name of the Dursch's son? ,.,Dudley,-1.2130581537882488,-0.44916439056396495,0.7290141582489014,I'm not sure
+8,lm_single,6, the, your,What is the name of your Dursley's son? ______.,What is the name of your Dursley's son? ,.,Dudley,-0.9798431396484375,-0.21594937642415368,0.4095466136932373,"Harry Potter
+
+Harry Potter
+
+Harry Potter"
+8,lm_single,6, the, this,What is the name of this Dursley's son? ______.,What is the name of this Dursley's son? ,.,Dudley,-0.9705393314361572,-0.2066455682118734,0.3486144542694092,"Harry Potter and the Half-Blood Prince
+
+What"
+8,lm_single,11, son, family,What is the name of the Dursley's family? ______.,What is the name of the Dursley's family? ,.,Dudley,-0.9581079483032227,-0.19421418507893884,0.1371450424194336,"Harry Potter and the Deathly Hallows
+
+A"
+8,lm_single,1,What,This,This is the name of the Dursley's son? ______.,This is the name of the Dursley's son? ,.,Dudley,-0.8973182042439779,-0.13342444101969408,0.6490600109100342,"I'm sorry, I don't know what to do"
+8,none,,,,The Wizarding community is under threat from an organization calling itself the ______.,The Wizarding community is under threat from an organization calling itself the ,.,Death Eaters,-0.4312228361765544,0.0,0.0,
+8,lm_single,4,arding,kid,The Wizkid community is under threat from an organization calling itself the ______.,The Wizkid community is under threat from an organization calling itself the ,.,Death Eaters,-2.206827163696289,-1.7756043275197346,0.6109075546264648,
+8,lm_single,4,arding, Kid,The Wiz Kid community is under threat from an organization calling itself the ______.,The Wiz Kid community is under threat from an organization calling itself the ,.,Death Eaters,-2.079235394795736,-1.6480125586191814,0.745511531829834,
+8,lm_single,3,iz,aco,The Wacoarding community is under threat from an organization calling itself the ______.,The Wacoarding community is under threat from an organization calling itself the ,.,Death Eaters,-1.9820828437805176,-1.5508600076039631,0.7973403930664062,
+8,lm_single,9, from,.,The Wizarding community is under threat. an organization calling itself the ______.,The Wizarding community is under threat. an organization calling itself the ,.,Death Eaters,-1.5008091926574707,-1.0695863564809163,0.6919822692871094,Wizarding World Association of the United States (WW
+8,lm_single,1,The,A,A Wizarding community is under threat from an organization calling itself the ______.,A Wizarding community is under threat from an organization calling itself the ,.,Death Eaters,-0.5794830322265625,-0.14826019605000812,0.20765113830566406,
+8,none,,,,Dumbledore asks Harry to send his answer by return of this ______.,Dumbledore asks Harry to send his answer by return of this ,.,owl,-0.03808995708823204,0.0,0.0,message
+8,lm_single,11, return, ow,Dumbledore asks Harry to send his answer by ow of this ______.,Dumbledore asks Harry to send his answer by ow of this ,.,owl,-1.9214444160461426,-1.8833544589579105,0.2950258255004883,urn
+8,lm_single,2,umbled,ed,Dedore asks Harry to send his answer by return of this ______.,Dedore asks Harry to send his answer by return of this ,.,owl,-0.7771826386451721,-0.7390926815569401,0.7836012840270996,message
+8,lm_single,5, Harry, for,Dumbledore asks for to send his answer by return of this ______.,Dumbledore asks for to send his answer by return of this ,.,owl,-0.2574765384197235,-0.21938658133149147,0.6957645416259766,message
+8,lm_single,5, Harry, the,Dumbledore asks the to send his answer by return of this ______.,Dumbledore asks the to send his answer by return of this ,.,owl,-0.15493109822273254,-0.1168411411345005,0.5723247528076172,message
+9,none,,,,"Harry inherited Sirius's home at number twelve, ___ Place.","Harry inherited Sirius's home at number twelve, ", Place.,Grimmauld,-0.48618027567863464,0.0,0.0,and he was the only one who knew the secret
+9,lm_single,4,ius, John,"Harry inherited Sir John's home at number twelve, ___ Place.","Harry inherited Sir John's home at number twelve, ", Place.,Grimmauld,-1.7334930896759033,-1.2473128139972687,0.08002614974975586,and he was the only one of the family to live
+9,lm_single,4,ius, Thomas,"Harry inherited Sir Thomas's home at number twelve, ___ Place.","Harry inherited Sir Thomas's home at number twelve, ", Place.,Grimmauld,-1.6913851499557495,-1.2052048742771149,0.10267496109008789,and he was the only one of the family to live
+9,lm_single,10,",",.,Harry inherited Sirius's home at number twelve. ___ Place.,Harry inherited Sirius's home at number twelve. , Place.,Grimmauld,-1.5746192932128906,-1.088439017534256,0.23984146118164062,Harry's parents were Sirius Black and Lily Potter
+9,lm_single,3, Sir, his,"Harry inherited hisius's home at number twelve, ___ Place.","Harry inherited hisius's home at number twelve, ", Place.,Grimmauld,-1.5098953247070312,-1.0237150490283966,0.7592344284057617,and he was very happy to have it
+9,lm_single,10,",", from,Harry inherited Sirius's home at number twelve from ___ Place.,Harry inherited Sirius's home at number twelve from , Place.,Grimmauld,-1.4732189178466797,-0.987038642168045,0.5384984016418457,"his father, Sirius Black"
+9,lm_single,3, Sir, the,"Harry inherited theius's home at number twelve, ___ Place.","Harry inherited theius's home at number twelve, ", Place.,Grimmauld,-1.4695627689361572,-0.9833824932575226,0.7493629455566406,and he was the only one who knew the house
+9,lm_single,1,Harry,The,"The inherited Sirius's home at number twelve, ___ Place.","The inherited Sirius's home at number twelve, ", Place.,Grimmauld,-1.3980636596679688,-0.9118833839893341,0.4239802360534668,"the house of the dead,
+is a place of"
+9,lm_single,6, home, ability,"Harry inherited Sirius's ability at number twelve, ___ Place.","Harry inherited Sirius's ability at number twelve, ", Place.,Grimmauld,-1.3146401643753052,-0.8284598886966705,0.7655906677246094,and he was the only one who could do it
+9,lm_single,6, home, powers,"Harry inherited Sirius's powers at number twelve, ___ Place.","Harry inherited Sirius's powers at number twelve, ", Place.,Grimmauld,-1.2942355871200562,-0.8080553114414215,0.4796562194824219,and he was the only one who could stop the
+9,lm_single,5,'s, Black,"Harry inherited Sirius Black home at number twelve, ___ Place.","Harry inherited Sirius Black home at number twelve, ", Place.,Grimmauld,-1.19480299949646,-0.7086227238178253,0.7274665832519531,and he was the only one who knew that Sirius
+9,lm_single,1,Harry,Q,"Q inherited Sirius's home at number twelve, ___ Place.","Q inherited Sirius's home at number twelve, ", Place.,Grimmauld,-1.0584434270858765,-0.5722631514072418,0.26525020599365234,and I'm going to take it
+9,lm_single,8, number, age,"Harry inherited Sirius's home at age twelve, ___ Place.","Harry inherited Sirius's home at age twelve, ", Place.,Grimmauld,-1.0060999393463135,-0.5199196636676788,0.3850851058959961,and he and his friends would spend the night there
+9,lm_single,9, twelve, one,"Harry inherited Sirius's home at number one, ___ Place.","Harry inherited Sirius's home at number one, ", Place.,Grimmauld,-0.8438928723335266,-0.35771259665489197,0.16739559173583984,and he's been there ever since
+9,lm_single,2, inherited,",","Harry, Sirius's home at number twelve, ___ Place.","Harry, Sirius's home at number twelve, ", Place.,Grimmauld,-0.8009612560272217,-0.31478098034858704,-0.41767311096191406,"is the only place in the world 
+where you"
+9,lm_single,7, at, from,"Harry inherited Sirius's home from number twelve, ___ Place.","Harry inherited Sirius's home from number twelve, ", Place.,Grimmauld,-0.7568813562393188,-0.2707010805606842,0.7610092163085938,and he was the only one who knew the secret
+9,lm_single,9, twelve, 12,"Harry inherited Sirius's home at number 12, ___ Place.","Harry inherited Sirius's home at number 12, ", Place.,Grimmauld,-0.6660743951797485,-0.1798941195011139,-0.04137372970581055,and he was the only one who knew the secret
+9,lm_single,8, number, the,"Harry inherited Sirius's home at the twelve, ___ Place.","Harry inherited Sirius's home at the twelve, ", Place.,Grimmauld,-0.6205304265022278,-0.13435015082359314,0.6423940658569336,and he was the only one who could get him out
+9,lm_single,7, at,",","Harry inherited Sirius's home, number twelve, ___ Place.","Harry inherited Sirius's home, number twelve, ", Place.,Grimmauld,-0.592237651348114,-0.10605737566947937,0.48182153701782227,"from his father, Sirius Black"
+9,lm_single,5,'s,',"Harry inherited Sirius' home at number twelve, ___ Place.","Harry inherited Sirius' home at number twelve, ", Place.,Grimmauld,-0.57085120677948,-0.08467093110084534,0.006317138671875,and he was the only one who knew the secret
+9,none,,,,Dumbledore's ___ was blackened and shriveled.,Dumbledore's , was blackened and shriveled.,hand,-3.133854627609253,0.0,0.0,"urn
+
+Dumbledore's urn is a fictional"
+9,lm_single,4,'s,"
+","Dumbledore
+ ___ was blackened and shriveled.","Dumbledore
+ ", was blackened and shriveled.,hand,-20.464988708496094,-17.33113408088684,0.5100808143615723,I have a question about the new website
+9,lm_single,6, was,_,Dumbledore's ____ blackened and shriveled.,Dumbledore's , blackened and shriveled.,hand,-10.755252838134766,-7.621398210525513,0.2982616424560547,"urn
+
+Dumbledore's urn is a fictional"
+9,lm_single,6, was,___,Dumbledore's ______ blackened and shriveled.,Dumbledore's , blackened and shriveled.,hand,-10.755252838134766,-7.621398210525513,0.11850500106811523,"urn
+
+Dumbledore's urn is a fictional"
+9,lm_single,1,D,"
+","
+umbledore's ___ was blackened and shriveled.","
+umbledore's ", was blackened and shriveled.,hand,-4.34104061126709,-1.207185983657837,0.6459722518920898,"urn - jonbaer
+http"
+9,lm_single,3,ore,or,Dumbledor's ___ was blackened and shriveled.,Dumbledor's , was blackened and shriveled.,hand,-3.8040900230407715,-0.6702353954315186,0.24141979217529297,"urn
+
+Dumbledor's urn is a bronze"
+9,lm_single,3,ore,ores,Dumbledores's ___ was blackened and shriveled.,Dumbledores's , was blackened and shriveled.,hand,-3.680213689804077,-0.5463590621948242,0.5732979774475098,"urn
+
+Dumbledore's urn is a fictional"
+9,lm_single,2,umbled,ys,Dysore's ___ was blackened and shriveled.,Dysore's , was blackened and shriveled.,hand,-3.583913564682007,-0.4500589370727539,0.7155241966247559,"urn
+
+Dysore's urn is a bronze"
+9,lm_single,2,umbled,iss,Dissore's ___ was blackened and shriveled.,Dissore's , was blackened and shriveled.,hand,-3.5479536056518555,-0.41409897804260254,0.7745027542114258,ichthyosis
+10,none,,,,Buckbeak's new protective alias is ______,Buckbeak's new protective alias is ,,Witherwings,-2.9910671710968018,0.0,0.0,
+10,lm_single,8, is,"
+","Buckbeak's new protective alias
+ ______","Buckbeak's new protective alias
+ ",,Witherwings,-7.737221717834473,-4.746154546737671,0.6119723320007324,"Buckbeak's new protective alias
+
+Buckbe"
+10,lm_single,7, alias, helmet,Buckbeak's new protective helmet is ______,Buckbeak's new protective helmet is ,,Witherwings,-4.698826313018799,-1.707759141921997,-0.28412342071533203,"a new type of helmet that is 
+designed to"
+10,lm_single,7, alias, suit,Buckbeak's new protective suit is ______,Buckbeak's new protective suit is ,,Witherwings,-4.640430450439453,-1.6493632793426514,-0.4284701347351074,a lot more comfortable than the old one
+10,lm_single,4,'s, the,Buckbeak the new protective alias is ______,Buckbeak the new protective alias is ,,Witherwings,-3.530379295349121,-0.5393121242523193,0.7248897552490234,"a new protective alias for the 
+Buckbeak"
+10,lm_single,6, protective, album,Buckbeak's new album alias is ______,Buckbeak's new album alias is ,,Witherwings,-3.378166675567627,-0.3870995044708252,-0.46657323837280273,
+10,lm_single,2,be,le,Buckleak's new protective alias is ______,Buckleak's new protective alias is ,,Witherwings,-3.3592700958251953,-0.36820292472839355,0.7994065284729004,
+10,lm_single,6, protective, book,Buckbeak's new book alias is ______,Buckbeak's new book alias is ,,Witherwings,-3.279829978942871,-0.28876280784606934,-0.3635272979736328,
+10,lm_single,1,Buck,Q,Qbeak's new protective alias is ______,Qbeak's new protective alias is ,,Witherwings,-3.210315704345703,-0.21924853324890137,0.5467400550842285,"ハイキャク
+
+Qbeak's"
+10,lm_single,3,ak,ater,Buckbeater's new protective alias is ______,Buckbeater's new protective alias is ,,Witherwings,-3.202174663543701,-0.21110749244689941,0.020426273345947266,
+10,lm_single,5, new, D,Buckbeak's D protective alias is ______,Buckbeak's D protective alias is ,,Witherwings,-3.1574771404266357,-0.16640996932983398,0.6447443962097168,ボクシング・ド・ボク
+10,lm_single,3,ak,ech,Buckbeech's new protective alias is ______,Buckbeech's new protective alias is ,,Witherwings,-3.1236085891723633,-0.13254141807556152,0.7954387664794922,
+10,lm_single,4,'s,:,Buckbeak: new protective alias is ______,Buckbeak: new protective alias is ,,Witherwings,-3.081843376159668,-0.09077620506286621,0.6847810745239258,
+10,none,,,,Buckbeak has been cared for by ______ since Sirius died,Buckbeak has been cared for by , since Sirius died,Hagrid,-4.277472178141276,0.0,0.0,ursine friends for many years
+10,lm_single,8, by, and,Buckbeak has been cared for and ______ since Sirius died,Buckbeak has been cared for and , since Sirius died,Hagrid,-6.967730204264323,-2.690258026123047,0.43680906295776367,"treated by the Buckbeak
+Foundation"
+10,lm_single,2,be,le,Buckleak has been cared for by ______ since Sirius died,Buckleak has been cared for by , since Sirius died,Hagrid,-5.484718958536784,-1.2072467803955078,0.6600761413574219,the following people
+10,lm_single,6, cared, found,Buckbeak has been found for by ______ since Sirius died,Buckbeak has been found for by , since Sirius died,Hagrid,-5.382915496826172,-1.1054433186848955,0.6872391700744629,"the 
+Buckbeak 
+in the"
+10,lm_single,2,be,ner,Bucknerak has been cared for by ______ since Sirius died,Bucknerak has been cared for by , since Sirius died,Hagrid,-5.288187662760417,-1.0107154846191406,0.6491255760192871,the following people
+10,lm_single,3,ak,ater,Buckbeater has been cared for by ______ since Sirius died,Buckbeater has been cared for by , since Sirius died,Hagrid,-5.060550053914388,-0.7830778757731114,0.15278244018554688,"the Buckbeater family since
+the early 1900s"
+10,lm_single,3,ak,ech,Buckbeech has been cared for by ______ since Sirius died,Buckbeech has been cared for by , since Sirius died,Hagrid,-5.0505978266398115,-0.7731256484985352,0.4908456802368164,"the Buckbeech Trust since
+1929"
+10,lm_single,5, been, become,Buckbeak has become cared for by ______ since Sirius died,Buckbeak has become cared for by , since Sirius died,Hagrid,-4.8580366770426435,-0.5805644989013672,0.7046761512756348,ursine friends
+10,lm_single,1,Buck,Q,Qbeak has been cared for by ______ since Sirius died,Qbeak has been cared for by , since Sirius died,Hagrid,-4.707611083984375,-0.43013890584309866,0.42681169509887695,ursine friends and family since he was a kitten
+10,lm_single,11, since, for,Buckbeak has been cared for by ______ for Sirius died,Buckbeak has been cared for by , for Sirius died,Hagrid,-4.702500661214192,-0.4250284830729161,0.7999420166015625,ursine friends for many years
+10,lm_single,8, by, for,Buckbeak has been cared for for ______ since Sirius died,Buckbeak has been cared for for , since Sirius died,Hagrid,-4.648714065551758,-0.3712418874104815,0.6013641357421875,"over a year by the Buckbeak
+Foundation"
+10,lm_single,4, has, (,Buckbeak ( been cared for by ______ since Sirius died,Buckbeak ( been cared for by , since Sirius died,Hagrid,-4.60278860727946,-0.3253164291381836,0.627385139465332,"the Buckbeak Foundation since 2002)
+
+Buck"
+10,lm_single,4, has,",","Buckbeak, been cared for by ______ since Sirius died","Buckbeak, been cared for by ", since Sirius died,Hagrid,-4.543497403462728,-0.26602522532145123,0.5856285095214844,ursine friends for many years
+10,lm_single,1,Buck,The,Thebeak has been cared for by ______ since Sirius died,Thebeak has been cared for by , since Sirius died,Hagrid,-4.471690813700358,-0.19421863555908203,0.47876691818237305,ursine friends and family since she was a kitten
+11,none,,,,The owl associated with Harry that vanished is named __.,The owl associated with Harry that vanished is named ,.,"""Hedwig""",-1.8784145355224608,0.0,0.0,
+11,lm_single,10, named, a,The owl associated with Harry that vanished is a __.,The owl associated with Harry that vanished is a ,.,"""Hedwig""",-3.1170364379882813,-1.2386219024658205,0.014560699462890625,
+11,lm_single,10, named, back,The owl associated with Harry that vanished is back __.,The owl associated with Harry that vanished is back ,.,"""Hedwig""",-2.9414669036865235,-1.0630523681640627,0.232177734375,in the woods
+11,lm_single,6, Harry, the,The owl associated with the that vanished is named __.,The owl associated with the that vanished is named ,.,"""Hedwig""",-2.44879264831543,-0.570378112792969,-0.4706134796142578,
+11,lm_single,6, Harry, a,The owl associated with a that vanished is named __.,The owl associated with a that vanished is named ,.,"""Hedwig""",-2.4397159576416017,-0.5613014221191408,-0.2490382194519043,
+11,lm_single,9, is, after,The owl associated with Harry that vanished after named __.,The owl associated with Harry that vanished after named ,.,"""Hedwig""",-2.207926559448242,-0.32951202392578116,0.7071123123168945,
+11,lm_single,9, is, last,The owl associated with Harry that vanished last named __.,The owl associated with Harry that vanished last named ,.,"""Hedwig""",-2.028546142578125,-0.15013160705566397,0.6617250442504883,
+11,lm_single,2, ow, New,The Newl associated with Harry that vanished is named __.,The Newl associated with Harry that vanished is named ,.,"""Hedwig""",-1.9751689910888672,-0.09675445556640638,0.7202534675598145,
+11,lm_single,7, that,'s,The owl associated with Harry's vanished is named __.,The owl associated with Harry's vanished is named ,.,"""Hedwig""",-1.9702682495117188,-0.0918537139892579,-0.35193538665771484,
+11,lm_single,4, associated, of,The owl of with Harry that vanished is named __.,The owl of with Harry that vanished is named ,.,"""Hedwig""",-1.9616521835327148,-0.0832376480102539,0.590205192565918,
