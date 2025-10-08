@@ -28,7 +28,7 @@ def compute_ppl(text: str, model, tokenizer, device='cuda'):
     return ppl, all_prob, loss.item()
 
 
-def inference(text: str, model, tokenizer) -> Dict:
+def inference(text: str, model, tokenizer, plus_plus: bool = False, zlib_ratio: bool = False) -> Dict:
     pred = {}
 
     _, all_prob, p1_likelihood = compute_ppl(text, model, tokenizer, device=model.device)
@@ -39,19 +39,32 @@ def inference(text: str, model, tokenizer) -> Dict:
     pred["PPL/lower"] = float(p1_likelihood / p_lower_likelihood)
     pred["PPL/zlib"] = float(p1_likelihood / zlib_entropy)
 
+    # Add zlib ratio if requested
+    if zlib_ratio:
+        pred["zlib_ratio"] = float(zlib_entropy / len(text))
+
     # min-k prob
     for ratio in [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]:
         k_length = int(len(all_prob)*ratio)
         topk_prob = np.sort(all_prob)[:k_length]
-        pred[f"Min-{int(ratio*100)}%"] = float(-np.mean(topk_prob).item())
+        
+        if plus_plus:
+            # Min-k++ uses normalized probabilities
+            # Normalize by subtracting the mean of all probabilities
+            mean_prob = np.mean(all_prob)
+            normalized_topk_prob = topk_prob - mean_prob
+            pred[f"Min-{int(ratio*100)}%"] = float(-np.mean(normalized_topk_prob).item())
+        else:
+            # Standard Min-k
+            pred[f"Min-{int(ratio*100)}%"] = float(-np.mean(topk_prob).item())
 
     return pred
 
 
-def eval_data(data: List[str], model, tokenizer):
+def eval_data(data: List[str], model, tokenizer, plus_plus: bool = False, zlib_ratio: bool = False):
     out = []
     for text in tqdm(data):
-        out.append({'text': text} | inference(text, model, tokenizer))
+        out.append({'text': text} | inference(text, model, tokenizer, plus_plus=plus_plus, zlib_ratio=zlib_ratio))
     return out
 
 
@@ -65,18 +78,18 @@ def eval(
     forget_data: List[str],
     retain_data: List[str],
     holdout_data: List[str],
-    model, tokenizer
+    model, tokenizer, plus_plus: bool = False, zlib_ratio: bool = False
 ):
     log = {}
     print("Evaluating on the forget set...")
-    log['forget'] = eval_data(forget_data, model, tokenizer)
+    log['forget'] = eval_data(forget_data, model, tokenizer, plus_plus=plus_plus, zlib_ratio=zlib_ratio)
     print("Evaluating on the retain set...")
-    log['retain'] = eval_data(retain_data, model, tokenizer)
+    log['retain'] = eval_data(retain_data, model, tokenizer, plus_plus=plus_plus, zlib_ratio=zlib_ratio)
     print("Evaluating on the holdout set...")
-    log['holdout'] = eval_data(holdout_data, model, tokenizer)
+    log['holdout'] = eval_data(holdout_data, model, tokenizer, plus_plus=plus_plus, zlib_ratio=zlib_ratio)
 
     auc = {}
-    ppl_types = list(log['forget'].keys())
+    ppl_types = list(log['forget'][0].keys())
     ppl_types.remove('text')
     for split0 in ['forget', 'retain', 'holdout']:
         for split1 in ['forget', 'retain', 'holdout']:

@@ -118,6 +118,7 @@ def eval_model(
             write_json(log, os.path.join(temp_dir, "verbmem_f/log.json"))
         out['verbmem_f'] = agg[verbmem_agg_key] * 100
 
+    
     # 2. privleak
     if 'privleak' in metrics:
         auc, log = eval_privleak(
@@ -129,7 +130,34 @@ def eval_model(
         if temp_dir is not None:
             write_json(auc, os.path.join(temp_dir, "privleak/auc.json"))
             write_json(log, os.path.join(temp_dir, "privleak/log.json"))
-        out['privleak'] = (auc[privleak_auc_key] - AUC_RETRAIN[privleak_auc_key]) / AUC_RETRAIN[privleak_auc_key] * 100
+        # out['privleak'] = (auc[privleak_auc_key] - AUC_RETRAIN[privleak_auc_key]) / AUC_RETRAIN[privleak_auc_key] * 100
+        out['privleak'] = auc[privleak_auc_key]
+
+    # 2. privleak++
+    if 'privleak++' in metrics:
+        auc, log = eval_privleak(
+            forget_data=read_json(privleak_forget_file),
+            retain_data=read_json(privleak_retain_file),
+            holdout_data=read_json(privleak_holdout_file),
+            model=model, tokenizer=tokenizer, plus_plus=True
+        )
+        if temp_dir is not None:
+            write_json(auc, os.path.join(temp_dir, "privleak++/auc.json"))
+            write_json(log, os.path.join(temp_dir, "privleak++/log.json"))
+        out['privleak++'] = auc[privleak_auc_key]
+
+    # zliib ratio
+    if 'privleak_zlib' in metrics:
+        auc, log = eval_privleak(
+            forget_data=read_json(privleak_forget_file),
+            retain_data=read_json(privleak_retain_file),
+            holdout_data=read_json(privleak_holdout_file),
+            model=model, tokenizer=tokenizer, plus_plus=True, zlib_ratio=True
+        )
+        if temp_dir is not None:
+            write_json(auc, os.path.join(temp_dir, "privleak_zlib/auc.json"))
+            write_json(log, os.path.join(temp_dir, "privleak_zlib/log.json"))
+        out['privleak_zlib'] = auc[privleak_auc_key]
 
     # 3. knowmem_f
     if 'knowmem_f' in metrics:

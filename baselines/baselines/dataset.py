@@ -237,7 +237,8 @@ class ForgetRetainDataset(DefaultDataset):
         exclude_file: str | None = None,
         include_file: str | None = None,
         rand_seed: int = 1,
-        upsampling: float = 1.0
+        upsampling: float = 1.0,
+        index_file: str | None = None
     ):
         self.forget_dataset = DefaultDataset(
             forget_file_path, tokenizer,

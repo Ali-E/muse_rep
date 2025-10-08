@@ -85,7 +85,8 @@ def verify_pairs(model, tokenizer, qa_dir: str, indices: list[int]) -> list[int]
     """Check QA pairs stored in qa_dir and return indices that match."""
     matched = []
 
-    knowmem_forget_qa_icl_file = "data/books/knowmem/forget_qa_icl.json"
+    # knowmem_forget_qa_icl_file = "data/books/knowmem/forget_qa_icl.json"
+    knowmem_forget_qa_icl_file = "data/books/knowmem/forget_qa_icl_got.json"
     icl = read_json(knowmem_forget_qa_icl_file)
 
     for idx in indices:
@@ -120,10 +121,14 @@ def verify_pairs(model, tokenizer, qa_dir: str, indices: list[int]) -> list[int]
 
 def main(
     key,
-    qa_dir: str = "~/muse_data/books_forget_matching_qas_new",
-    model_name: str = "muse-bench/MUSE-Books_target",
+    # qa_dir: str = "~/muse_data/books_forget_matching_qas_new",
+    # model_name: str = "muse-bench/MUSE-Books_target",
+    # matching_file: str = None,
+    # tokenizer_name: str = "meta-llama/Llama-2-7b-hf",
+    qa_dir: str = "data/GoT_matching_qas/",
+    model_name: str = "meta-llama/Meta-Llama-3-8B",
     matching_file: str = None,
-    tokenizer_name: str = "meta-llama/Llama-2-7b-hf",
+    tokenizer_name: str = "meta-llama/Meta-Llama-3-8B",
 ):
 
     ## temporary:
@@ -133,8 +138,10 @@ def main(
 
     print('key: ', key)
 
-    max_id = 553
-    considering_count = 553
+    # max_id = 553
+    # considering_count = 553
+    max_id = 7
+    considering_count = 7
 
     # indices = list(range(553))
     indices = list(range(max_id))
@@ -153,7 +160,8 @@ def main(
     if matching_file is None:
         matches = verify_pairs(model, tokenizer, qa_dir, indices)
         match_df = pd.DataFrame(matches, columns=['chunk_idx', 'q_idx'])
-        match_df.to_csv("~/muse_data/initial_matching_qas.csv", index=False)
+        # match_df.to_csv("~/muse_data/initial_matching_qas.csv", index=False)
+        match_df.to_csv("data/GoT_matching_qas.csv", index=False)
         matching_indices = list(match_df['chunk_idx'].values)
     else:
         match_df = pd.read_csv(matching_file, index_col=None)
@@ -169,14 +177,15 @@ def main(
 
 
     # prev_set = set(list(range(36)))
-    prev_set = set()  # No previous set for now
+    # prev_set = set()  # No previous set for now
+    prev_set = set(list(range(4)))  # No previous set for now
 
     remaining_indices = sorted(set(indices) - set(matching_indices) - prev_set)[:considering_count]
     print(remaining_indices)
     
     # exit(0)
 
-    qa_dir = "~/muse_data/books_forget_newqa/"
+    # qa_dir = "~/muse_data/books_forget_newqa/"
     try_counter = 0
     while remaining_indices:
         # Generate questions for remaining indices
@@ -187,7 +196,8 @@ def main(
         remaining_indices_updated = remaining_indices
         
         while True:
-            gen_flag = generate_qa(remaining_indices_updated, key, sleep_time=10)
+            # gen_flag = generate_qa(remaining_indices_updated, key, sleep_time=2)
+            gen_flag = generate_qa(remaining_indices_updated, key, sleep_time=2, forget_file="data/GoT/GoT/GoT_all.csv", directory=qa_dir)
             if gen_flag:
                 break
             print('long sleep time, waiting for Qwen to recover...')
@@ -210,7 +220,8 @@ def main(
         print('all matching indices: ', matching_indices)
         remaining_indices = [i for i in remaining_indices if i not in new_indices]
         print('remaining indices: ', remaining_indices)
-        match_df.to_csv("~/muse_data/matching_qas.csv")
+        # match_df.to_csv("~/muse_data/matching_qas.csv")
+        match_df.to_csv("data/GoT_matching_qas.csv")
 
         try_counter += 1
         if try_counter >= 10:
@@ -226,8 +237,10 @@ if __name__ == "__main__":
     a.extend([2,3,4])
 
     parser = argparse.ArgumentParser(description="Find matching QA pairs")
-    parser.add_argument("--qa_dir", default="~/muse_data/books_forget_matching_qas_new", help="Directory containing QA csv files")
-    parser.add_argument("--model", default="muse-bench/MUSE-Books_target", help="Model name on HuggingFace")
+    # parser.add_argument("--qa_dir", default="~/muse_data/books_forget_matching_qas_new", help="Directory containing QA csv files")
+    parser.add_argument("--qa_dir", default="data/GoT_matching_qas/", help="Directory containing QA csv files")
+    # parser.add_argument("--model", default="muse-bench/MUSE-Books_target", help="Model name on HuggingFace")
+    parser.add_argument("--model", default="meta-llama/Meta-Llama-3-8B", help="Model name on HuggingFace")
     parser.add_argument("--matching_file", default=None, help="Path to the matching file")
     args = parser.parse_args()
 

@@ -17,12 +17,13 @@ SEED=1
 
 
 # algo_list=('npo' 'npo_gdr' 'npo_klr')
-# algo_list=('npo')
-algo_list=('npo' 'npo_gdr')
+algo_list=('npo' 'rmu' 'simnpo')
+# algo_list=('npo' 'npo_gdr')
 # forget_portion_list=(0.05 0.1)
 # forget_portion_list=(0.05 0.1 0.25 0.5 0.75)
 # forget_portion_list=(0.05 0.1 0.25 0.5 0.75 1.0)
-forget_portion_list=(1.0)
+forget_portion_list=(0.1 0.25 0.5 0.75 1.0)
+# forget_portion_list=(1.0)
 
 
 for algo in "${algo_list[@]}"; do
