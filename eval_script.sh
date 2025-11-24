@@ -1,19 +1,27 @@
 CORPUS="books"
 algo="npo"
-res_types=("knowmem_r" "knowmem_f" "privleak" "privleak++" "privleak_zlib" )
+res_types=("knowmem_r" "knowmem_f")
+# res_types=("knowmem_r" "knowmem_f" "privleak" "privleak++" "privleak_zlib" )
 # res_types=("knowmem_f")
 # res_types=("knowmem_r")
 
 indices_seed=1
 
+# python eval.py \
+#     --model_dirs "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_0.25_s1/" \
+#                              "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_0.5_s1/" \
+#     --names "${algo}_0.25" "${algo}_0.5" \
+#     --corpus "${CORPUS}" \
+#     --indices_seed ${indices_seed} \
+#     --including_ratios "0.25" "0.5" \
+#     --out_file "${CORPUS}_knowmem_f_${algo}.csv" \
+#     --metrics "${res_types[@]}" 
 
 python eval.py \
-    --model_dirs "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_0.25_s1/" \
-                             "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_0.5_s1/" \
-    --names "${algo}_0.25" "${algo}_0.5" \
+    --model_dirs "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_0.5_s1/" \
+    --names "${algo}_0.5" \
     --corpus "${CORPUS}" \
     --indices_seed ${indices_seed} \
-    --including_ratios "0.25" "0.5" \
     --out_file "${CORPUS}_knowmem_f_${algo}.csv" \
     --metrics "${res_types[@]}" 
 

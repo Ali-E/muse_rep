@@ -3,11 +3,14 @@ CORPUS="books"
 FORGET="../data/$CORPUS/raw/forget.txt"
 RETAIN="../data/$CORPUS/raw/retain1.txt"
 
-TARGET_DIR="muse-bench/MUSE-Books_target"
-LLAMA_DIR="meta-llama/Llama-2-7b-hf"
+# TARGET_DIR="muse-bench/MUSE-Books_target"
+# LLAMA_DIR="meta-llama/Llama-2-7b-hf"
+
+TARGET_DIR="meta-llama/Meta-Llama-3-8B",
+LLAMA_DIR="meta-llama/Meta-Llama-3-8B",
 
 MAX_LEN=2048
-EPOCHS=1
+EPOCHS=5
 LR='1e-5'
 PER_DEVICE_BATCH_SIZE=8 # 4 GPUs
 FT_EPOCHS=1
@@ -17,12 +20,13 @@ SEED=1
 
 
 # algo_list=('npo' 'npo_gdr' 'npo_klr')
-algo_list=('npo' 'rmu' 'simnpo')
+# algo_list=('npo' 'rmu' 'simnpo')
+algo_list=('npo')
 # algo_list=('npo' 'npo_gdr')
 # forget_portion_list=(0.05 0.1)
 # forget_portion_list=(0.05 0.1 0.25 0.5 0.75)
 # forget_portion_list=(0.05 0.1 0.25 0.5 0.75 1.0)
-forget_portion_list=(0.1 0.25 0.5 0.75 1.0)
+forget_portion_list=(0.05 0.1 0.25 0.5 0.75 1.0)
 # forget_portion_list=(1.0)
 
 

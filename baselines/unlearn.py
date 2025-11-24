@@ -61,7 +61,12 @@ def main():
             epochs=args.epochs,
             learning_rate=args.lr,
             tokenizer_dir=args.tokenizer_dir,
+            portion=args.forget_portion,
+            # exclude_file=args.match_file,
+            include_file=args.match_file,
             index_file=args.index_file,
+            rand_seed=args.seed,
+            upsampling=args.upsample,
             alpha=args.alpha,
         )
 

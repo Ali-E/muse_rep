@@ -42,11 +42,11 @@ def get_params(model, layer_ids, param_ids):
                 params.append(p)
     return params
 
+
 def unlearn(
     model_dir: str,
     data_file: str,
     out_dir: str,
-    index_file : str,
     retain_data_file: str | None = None,
     batch_size: int = 2,
     epochs: int = 5,
@@ -57,6 +57,12 @@ def unlearn(
     layer_id=7,
     layer_ids=[5,6,7],
     param_ids=[6],
+    portion: float = 1.0,
+    exclude_file: str | None = None,
+    include_file: str | None = None,
+    rand_seed: int = 1,
+    upsampling: float = 1.0,
+    index_file: str | None = None,
     steering_coeffs = 6.5,
     alpha=1200,
     module_str="{model_name}.model.layers[{layer_id}]",
@@ -77,6 +83,11 @@ def unlearn(
         retain_file_path=retain_data_file,
         max_len=max_len,
         index_file=index_file,
+        portion=portion,
+        exclude_file=exclude_file,
+        include_file=include_file,
+        rand_seed=rand_seed,
+        upsampling=upsampling
     )
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=dataset.get_collate_fn())
 
