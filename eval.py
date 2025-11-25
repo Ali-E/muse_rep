@@ -1,6 +1,7 @@
 from metrics.verbmem import eval as eval_verbmem
 from metrics.privleak import eval as eval_privleak
 from metrics.knowmem import eval as eval_knowmem
+from metrics.fluency import eval as eval_fluency
 from utils import load_model, load_tokenizer, write_csv, read_json, write_json, load_csv
 from constants import SUPPORTED_METRICS, CORPORA, LLAMA_DIR, DEFAULT_DATA, AUC_RETRAIN
 
@@ -36,6 +37,8 @@ def eval_model(
     verbmem_max_new_tokens: int = 128,
     knowmem_agg_key: str = 'mean_rougeL',
     knowmem_max_new_tokens: int = 32,
+    fluency_max_samples: int = 1000,
+    fluency_max_length: int = 512,
     verbmem_forget_file: str | None = None,
     privleak_forget_file: str | None = None,
     privleak_retain_file: str | None = None,
@@ -219,6 +222,64 @@ def eval_model(
             # write_json(log, os.path.join(temp_dir, "knowmem_r/log.json"))
             log.to_csv(os.path.join(temp_dir, "knowmem_r/log.json"), index=False)
         out['knowmem_r'] = agg[knowmem_agg_key] * 100
+
+    # 5. Fluency metrics (WikiText)
+    if 'fluency_wikitext' in metrics:
+        agg, log = eval_fluency(
+            model=model,
+            tokenizer=tokenizer,
+            metrics=['wikitext'],
+            max_samples=fluency_max_samples,
+            max_length=fluency_max_length,
+            device=device
+        )
+        if temp_dir is not None:
+            write_json(agg, os.path.join(temp_dir, "fluency_wikitext/agg.json"))
+            write_json(log, os.path.join(temp_dir, "fluency_wikitext/log.json"))
+        out['fluency_wikitext_ppl'] = agg['wikitext2_perplexity']
+
+    # 6. Fluency metrics (C4)
+    if 'fluency_c4' in metrics:
+        agg, log = eval_fluency(
+            model=model,
+            tokenizer=tokenizer,
+            metrics=['c4'],
+            max_samples=fluency_max_samples,
+            max_length=fluency_max_length,
+            device=device
+        )
+        if temp_dir is not None:
+            write_json(agg, os.path.join(temp_dir, "fluency_c4/agg.json"))
+            write_json(log, os.path.join(temp_dir, "fluency_c4/log.json"))
+        out['fluency_c4_ppl'] = agg['c4_perplexity']
+
+    # 7. Fluency metrics (LAMBADA)
+    if 'fluency_lambada' in metrics:
+        agg, log = eval_fluency(
+            model=model,
+            tokenizer=tokenizer,
+            metrics=['lambada'],
+            max_samples=fluency_max_samples,
+            device=device
+        )
+        if temp_dir is not None:
+            write_json(agg, os.path.join(temp_dir, "fluency_lambada/agg.json"))
+            write_json(log, os.path.join(temp_dir, "fluency_lambada/log.json"))
+        out['fluency_lambada_acc'] = agg['lambada_accuracy']
+
+    # 8. Fluency metrics (HellaSwag)
+    if 'fluency_hellaswag' in metrics:
+        agg, log = eval_fluency(
+            model=model,
+            tokenizer=tokenizer,
+            metrics=['hellaswag'],
+            max_samples=fluency_max_samples,
+            device=device
+        )
+        if temp_dir is not None:
+            write_json(agg, os.path.join(temp_dir, "fluency_hellaswag/agg.json"))
+            write_json(log, os.path.join(temp_dir, "fluency_hellaswag/log.json"))
+        out['fluency_hellaswag_acc'] = agg['hellaswag_accuracy']
 
     return out
 
