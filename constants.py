@@ -1,8 +1,10 @@
-SUPPORTED_METRICS = ['verbmem_f', 'privleak', 'knowmem_f', 'knowmem_r']
+SUPPORTED_METRICS = ['verbmem_f', 'privleak', 'knowmem_f', 'knowmem_r', 'privleak++', 'privleak_zlib', 'fluency_wikitext', 'fluency_c4', 'fluency_lambada', 'fluency_hellaswag']
 
 CORPORA = ['news', 'books']
 
-LLAMA_DIR = "meta-llama/Llama-2-7b-hf"
+# LLAMA_DIR = "meta-llama/Llama-2-7b-hf"
+LLAMA_DIR = "meta-llama/Meta-Llama-3-8B"
+
 # LLAMA_DIR = "EleutherAI/pythia-2.8b"
 # LLAMA_DIR = "EleutherAI/pythia-6.9b"
 

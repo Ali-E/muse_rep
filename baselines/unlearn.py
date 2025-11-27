@@ -4,7 +4,7 @@ BASELINE_PATH = pathlib.Path(__file__).parent.resolve()
 sys.path.append(BASELINE_PATH)
 import torch
 
-from baselines import it_unlearn, tv_unlearn, finetune
+from baselines import it_unlearn, tv_unlearn, finetune, rmu_unlearn
 
 import argparse
 from os.path import basename, dirname, join as pathjoin
@@ -42,6 +42,7 @@ def main():
             portion=args.forget_portion,
             # exclude_file=args.match_file,
             include_file=args.match_file,
+            index_file=args.index_file,
             rand_seed=args.seed,
             upsampling=args.upsample
         )
@@ -50,6 +51,23 @@ def main():
             some_pt_model_dir=args.model_dir,
             some_ft_model_dir=ft_model_dir,
             alpha=args.alpha
+        )
+
+    elif args.algo == 'rmu':
+        rmu_unlearn(
+            args.model_dir, args.data_file, args.out_dir,
+            retain_data_file=args.retain_data_file,
+            batch_size=args.per_device_batch_size,
+            epochs=args.epochs,
+            learning_rate=args.lr,
+            tokenizer_dir=args.tokenizer_dir,
+            portion=args.forget_portion,
+            # exclude_file=args.match_file,
+            include_file=args.match_file,
+            index_file=args.index_file,
+            rand_seed=args.seed,
+            upsampling=args.upsample,
+            alpha=args.alpha,
         )
 
     else:
@@ -61,12 +79,19 @@ def main():
             epochs=args.epochs,
             learning_rate=args.lr,
             max_len=args.max_len,
+
+            beta=args.beta,
+            gamma=args.gamma,
+            npo_coeff=args.npo_coeff,
+            coeff=args.coeff,
+
             tokenizer_dir=args.tokenizer_dir,
             resume_from_checkpoint=args.resume_from_checkpoint,
             # forget_subset_indices=forget_subset_indices,
             portion=args.forget_portion,
             # exclude_file=args.match_file,
             include_file=args.match_file,
+            index_file=args.index_file,
             rand_seed=args.seed,
             upsampling=args.upsample
         )
@@ -113,6 +138,11 @@ def get_args():
     )
 
     parser.add_argument(
+        '--index_file', type=str, default='~/muse_data/indices.csv',
+        help="Path to the matching file to exclude/include their indices when portion < 1.0"
+    )
+
+    parser.add_argument(
         '--seed', type=int, default=1,
         help="Random seed for reproducibility. Defaults to 1."
     )
@@ -141,6 +171,40 @@ def get_args():
     parser.add_argument(
         '--alpha', type=float, default=1.0,
         help="Scaling coefficient scales the task vector if algo is task vector (tv)."
+    )
+
+
+
+
+    parser.add_argument(
+        '--beta', type=float, default=0.1,
+        help="for npo"
+    )
+    
+    parser.add_argument(
+        '--coeff', type=float, default=0.1,
+        help="for retain loss"
+    )
+
+    parser.add_argument(
+        '--npo_coeff', type=float, default=0.1,
+        help="for forget loss"
+    )
+
+    parser.add_argument(
+        '--gamma', type=float, default=0.1,
+        help="for simnpo"
+    )
+
+
+    # RMU-specific arguments
+    parser.add_argument(
+        '--eval_data', type=str, default=None,
+        help="Path to the evaluation dataset file. If provided, evaluation will be performed after each epoch."
+    )
+    parser.add_argument(
+        '--use_fast', action='store_true',
+        help="Whether to use the fast tokenizer."
     )
     
     args = parser.parse_args()

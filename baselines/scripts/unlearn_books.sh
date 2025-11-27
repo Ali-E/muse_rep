@@ -14,7 +14,7 @@ FT_EPOCHS=10
 FT_LR='1e-5'
 
 
-for algo in 'npo_klr'; do
+for algo in 'npo'; do
     python unlearn.py \
         --algo $algo \
         --model_dir $TARGET_DIR --tokenizer_dir $LLAMA_DIR \

@@ -14,7 +14,7 @@ def unlearn(
     out_dir: str,
     retain_data_file: str | None = None,
     loss_type: str = 'ga',
-    per_device_batch_size: int = 2,
+    per_device_batch_size: int = 8,
     epochs: int = 5,
     learning_rate=1e-5,
     max_len: int = 4096,
@@ -25,7 +25,12 @@ def unlearn(
     exclude_file: str | None = None,
     include_file: str | None = None,
     rand_seed: int = 1,
-    upsampling: float = 1.0
+    upsampling: float = 1.0,
+    index_file: str | None = None,
+    beta: float = 0.1,
+    gamma: float = 0.0,
+    npo_coeff: float = 1.0,
+    coeff: float = 1.0,
 ):
     if 'gd' in loss_type:
         assert retain_data_file is not None, "Retain data must be specified for grad_diff."
@@ -79,7 +84,8 @@ def unlearn(
         optim='adamw_torch',
         lr_scheduler_type='constant',
         bf16=True,
-        report_to='none'        # Disable wandb
+        report_to='none',        # Disable wandb
+        skip_memory_metrics=True   # For DataParallel compatibility
     )
 
     trainer = IterativeUnlearner(
@@ -89,7 +95,11 @@ def unlearn(
         train_dataset=dataset,
         args=training_args,
         data_collator=dataset.get_collate_fn(),
-        loss_type=loss_type
+        loss_type=loss_type,
+        beta=beta,
+        gamma=gamma,
+        npo_coeff=npo_coeff,
+        coeff=coeff,
     )
 
     # ------------------------------------
@@ -115,10 +125,24 @@ class IterativeUnlearner(Trainer):
                  loss_type: str = 'ga',
                  ref_model: AutoModelForCausalLM | None = None,
                  beta: float = 0.1,
+                 gamma: float = 0.0,
+                 coeff: float = 1.0,
+                 npo_coeff: float = 1.0,
+
                  **kwargs):
         self.loss_type = loss_type
         self.ref_model = ref_model
         self.beta = beta    # Only relevant when `'po' in self.loss_type`
+        self.gamma = gamma
+        self.coeff = coeff
+        self.npo_coeff = npo_coeff
+        
+        # Loss accumulation variables
+        self.accumulated_loss = 0.0
+        self.step_count = 0
+        
+        # List to store average loss at the end of each epoch
+        self.epoch_avg_losses = []
 
         if ref_model is not None:
             assert 'po' in self.loss_type or 'kl' in self.loss_type
@@ -170,15 +194,22 @@ class IterativeUnlearner(Trainer):
         if 'ga' in self.loss_type:
             loss += -loss_f
 
-        elif 'npo' in self.loss_type:
+        elif 'npo' in self.loss_type and 'simnpo' not in self.loss_type:
             neg_log_ratio = outputs_f_ref.logits - outputs_f.logits
+            loss += -F.logsigmoid(self.beta * neg_log_ratio).mean() * 2 / self.beta
+
+        elif 'simnpo' in self.loss_type:
+            neg_log_ratio = - outputs_f.logits - self.gamma
             loss += -F.logsigmoid(self.beta * neg_log_ratio).mean() * 2 / self.beta
 
         else:
             raise NotImplementedError("Cannot infer the given loss type.")
 
         if 'gdr' in self.loss_type:
-            loss += loss_r
+            if 'simnpo' not in self.loss_type:
+                loss += loss_r
+            else:
+                loss = self.npo_coeff * loss + self.coeff * loss_r
 
         if 'klf' in self.loss_type:
             raise NotImplementedError("KL forget not implemented yet!")
@@ -190,7 +221,11 @@ class IterativeUnlearner(Trainer):
                 reduction = 'batchmean',
                 log_target = True
             )
-            loss += kl_r
+            
+            if 'simnpo' not in self.loss_type:
+                loss += kl_r
+            else:
+                loss += self.coeff * kl_r
 
         return (loss, outputs_f) if return_outputs else loss
 
@@ -203,3 +238,53 @@ class IterativeUnlearner(Trainer):
             logits = outputs.logits
             loss = outputs.loss
         return (loss, logits, labels)
+
+    def log(self, logs):
+        """Override log method to accumulate loss"""
+        super().log(logs)
+        
+        # Accumulate training loss if present
+        if 'train_loss' in logs:
+            self.accumulated_loss += logs['train_loss']
+            self.step_count += 1
+
+    def on_epoch_end(self):
+        """Store average loss at the end of each epoch"""
+        if self.step_count > 0:
+            avg_loss = self.accumulated_loss / self.step_count
+            current_epoch = int(self.state.epoch)
+            print(f"Epoch {current_epoch} - Average Loss: {avg_loss:.6f} (Total: {self.accumulated_loss:.6f} over {self.step_count} steps)")
+            
+            # Store the average loss for this epoch
+            self.epoch_avg_losses.append(avg_loss)
+            
+            # Reset for next epoch
+            self.accumulated_loss = 0.0
+            self.step_count = 0
+        
+        super().on_epoch_end()
+
+    def on_train_end(self):
+        """Save epoch average losses to a file after training completes"""
+        super().on_train_end()
+        
+        # Save the epoch average losses to a file
+        import os
+        import json
+        
+        output_dir = self.args.output_dir
+        loss_file_path = os.path.join(output_dir, 'epoch_avg_losses.json')
+        
+        loss_data = {
+            'epoch_avg_losses': self.epoch_avg_losses,
+            'total_epochs': len(self.epoch_avg_losses),
+            'loss_type': self.loss_type
+        }
+        
+        with open(loss_file_path, 'w') as f:
+            json.dump(loss_data, f, indent=2)
+        
+        print(f"Epoch average losses saved to: {loss_file_path}")
+        print(f"Total epochs trained: {len(self.epoch_avg_losses)}")
+        if self.epoch_avg_losses:
+            print(f"Final epoch average loss: {self.epoch_avg_losses[-1]:.6f}")

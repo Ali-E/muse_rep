@@ -116,71 +116,145 @@ class DefaultDataset(Dataset):
 
         assert Path(file_path).suffix == '.txt'
 
-        tokens = tokenizer(read_text(file_path), add_special_tokens=False, return_tensors='pt').input_ids[0]
-        assert len(tokens.shape) == 1, "Debug error: Tokens not 1-dimensional"
-
-        if add_bos_token:
-            self.input_ids = [
-                F.pad(
-                    tokens[i : i + max_len - 1], (1, 0),
-                    value=tokenizer.bos_token_id
+        # Check if forget_chunks.csv exists, if so use that instead
+        csv_path = Path(file_path).parent / 'forget_chunks.csv'
+        
+        if csv_path.exists():
+            print(f"Loading chunks from CSV file: {csv_path}")
+            # Read chunks from CSV file
+            chunks_df = pd.read_csv(csv_path)
+            
+            # Get total number of chunks
+            n_total = len(chunks_df)
+            print(f"Total chunks in CSV: {n_total}")
+            
+            # Determine which chunks to select based on portion and include/exclude files
+            if portion < 1.0 or include_file is not None or exclude_file is not None:
+                if 'news' in file_path:
+                    print('forget file is set to news!')
+                    print(file_path)
+                    n_total = 553
+                    exclude_file = None
+                
+                len_total = n_total
+                forget_subset_indices = load_forget_subset(n_total, portion, exclude_file, include_file, FORGET_SEED=rand_seed, len_total=len_total)
+                
+                if 'news' in file_path:
+                    forget_subset_indices = list(range(min(len(forget_subset_indices), n_total)))
+                
+                # Select only the chunks at the specified indices
+                selected_chunks = chunks_df.iloc[forget_subset_indices]
+                print(f"Selected {len(selected_chunks)} chunks from {n_total} total.")
+            else:
+                forget_subset_indices = list(range(n_total))
+                selected_chunks = chunks_df
+                print(f"Using all {n_total} chunks.")
+            
+            # Now tokenize the selected chunks
+            self.input_ids = []
+            for _, row in selected_chunks.iterrows():
+                chunk_text = row['text']
+                encoding: torch.Tensor = tokenizer(
+                    chunk_text,
+                    add_special_tokens=add_bos_token,
+                    return_tensors='pt',
+                    max_length=max_len,
+                    truncation=True
+                ).input_ids[0]
+                encoding = pad_or_trim_tensor(
+                    encoding,
+                    target_length=max_len,
+                    padding_value=tokenizer.pad_token_id
                 )
-                for i in range(0, len(tokens), max_len - 1)
-            ]
+                self.input_ids.append(encoding)
+            
+            print(f"Tokenized {len(self.input_ids)} chunks.")
+            
+            # Save the subset if filtering was applied
+            if portion < 1.0 or include_file is not None or exclude_file is not None:
+                sub_forget_file_address = pathjoin(dirname(file_path), f"forget_subset_{portion}_seed_{rand_seed}.csv")
+                with open(sub_forget_file_address, 'w', newline='', encoding='utf-8') as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerow(["id", "text"])
+                    for idx, input_id in zip(forget_subset_indices, self.input_ids):
+                        text = tokenizer.decode(input_id, skip_special_tokens=True)
+                        writer.writerow([idx, text])
+                
+                forget_indices_only = pathjoin(dirname(file_path), f"forget_indices_{portion}_seed_{rand_seed}.csv")
+                with open(forget_indices_only, 'w', newline='', encoding='utf-8') as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerow(["id"])
+                    for idx in forget_subset_indices:
+                        writer.writerow([idx])
+        
         else:
-            self.input_ids = [
-                tokens[i : i + max_len]
-                for i in range(0, len(tokens), max_len)
-            ]
+            # Original behavior: read text file, tokenize, then chunk
+            print(f"CSV file not found ({csv_path}), using original text file processing.")
+            tokens = tokenizer(read_text(file_path), add_special_tokens=False, return_tensors='pt').input_ids[0]
+            assert len(tokens.shape) == 1, "Debug error: Tokens not 1-dimensional"
 
-        # Rotate the tokens if the last `input_ids` isn't filled to max_len
-        if len(self.input_ids[-1]) < max_len:
-            self.input_ids[-1] = torch.concat(
-                [self.input_ids[-1], self.input_ids[0]], dim=-1
-            )[:max_len]
+            if add_bos_token:
+                self.input_ids = [
+                    F.pad(
+                        tokens[i : i + max_len - 1], (1, 0),
+                        value=tokenizer.bos_token_id
+                    )
+                    for i in range(0, len(tokens), max_len - 1)
+                ]
+            else:
+                self.input_ids = [
+                    tokens[i : i + max_len]
+                    for i in range(0, len(tokens), max_len)
+                ]
 
-        # if forget_subset_indices is not None:
-        if portion < 1.0 or include_file is not None or exclude_file is not None:
-            # main(
-            #     file_path,
-            #     Path(file_path).with_suffix('.csv')
-            # )
+            # Rotate the tokens if the last `input_ids` isn't filled to max_len
+            if len(self.input_ids[-1]) < max_len:
+                self.input_ids[-1] = torch.concat(
+                    [self.input_ids[-1], self.input_ids[0]], dim=-1
+                )[:max_len]
 
-            print(f"Initial input_ids length: {len(self.input_ids)}")
-            # self.input_ids = [self.input_ids[idx] for idx in forget_subset_indices]
-            n_total = len(self.input_ids)
+            # if forget_subset_indices is not None:
+            if portion < 1.0 or include_file is not None or exclude_file is not None:
+                # main(
+                #     file_path,
+                #     Path(file_path).with_suffix('.csv')
+                # )
 
-            if 'news' in file_path:
-                print('forget file is set to news!')
-                print(file_path)
-                n_total = 553
-                exclude_file = None
+                print(f"Initial input_ids length: {len(self.input_ids)}")
+                # self.input_ids = [self.input_ids[idx] for idx in forget_subset_indices]
+                n_total = len(self.input_ids)
 
-            len_total = min(n_total, len(self.input_ids))
+                if 'news' in file_path:
+                    print('forget file is set to news!')
+                    print(file_path)
+                    n_total = 553
+                    exclude_file = None
 
-            forget_subset_indices = load_forget_subset(n_total, portion, exclude_file, include_file, FORGET_SEED=rand_seed, len_total=len_total)
-            if 'news' in file_path:
-                forget_subset_indices = list(range(min(len(forget_subset_indices), len(self.input_ids))))
+                len_total = min(n_total, len(self.input_ids))
 
-            self.input_ids = [self.input_ids[idx] for idx in forget_subset_indices]
-            print(f"Using {len(self.input_ids)} input_ids from the forget subset indices.")
-            # name the file based on the portion and rand_seed and file_path:
-            sub_forget_file_address = pathjoin(dirname(file_path), f"forget_subset_{portion}_seed_{rand_seed}.csv") 
-            # save the subset_indices to a CSV file using forget_subset_indices as the index
-            with open(sub_forget_file_address, 'w', newline='', encoding='utf-8') as csvfile:
-                writer = csv.writer(csvfile)
-                writer.writerow(["id", "text"])
-                for idx, input_id in zip(forget_subset_indices, self.input_ids):
-                    text = tokenizer.decode(input_id, skip_special_tokens=True)
-                    writer.writerow([idx, text])
+                forget_subset_indices = load_forget_subset(n_total, portion, exclude_file, include_file, FORGET_SEED=rand_seed, len_total=len_total)
+                if 'news' in file_path:
+                    forget_subset_indices = list(range(min(len(forget_subset_indices), len(self.input_ids))))
 
-            forget_indices_only = pathjoin(dirname(file_path), f"forget_indices_{portion}_seed_{rand_seed}.csv") 
-            # save the subset_indices to a CSV file using forget_subset_indices as the index
-            with open(forget_indices_only, 'w', newline='', encoding='utf-8') as csvfile:
-                writer = csv.writer(csvfile)
-                writer.writerow(["id"])
-                for idx in forget_subset_indices:
-                    writer.writerow([idx])
+                self.input_ids = [self.input_ids[idx] for idx in forget_subset_indices]
+                print(f"Using {len(self.input_ids)} input_ids from the forget subset indices.")
+                # name the file based on the portion and rand_seed and file_path:
+                sub_forget_file_address = pathjoin(dirname(file_path), f"forget_subset_{portion}_seed_{rand_seed}.csv") 
+                # save the subset_indices to a CSV file using forget_subset_indices as the index
+                with open(sub_forget_file_address, 'w', newline='', encoding='utf-8') as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerow(["id", "text"])
+                    for idx, input_id in zip(forget_subset_indices, self.input_ids):
+                        text = tokenizer.decode(input_id, skip_special_tokens=True)
+                        writer.writerow([idx, text])
+
+                forget_indices_only = pathjoin(dirname(file_path), f"forget_indices_{portion}_seed_{rand_seed}.csv") 
+                # save the subset_indices to a CSV file using forget_subset_indices as the index
+                with open(forget_indices_only, 'w', newline='', encoding='utf-8') as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerow(["id"])
+                    for idx in forget_subset_indices:
+                        writer.writerow([idx])
 
         if upsampling > 1.0:
             rng = random.Random(rand_seed + 1234)
@@ -237,7 +311,8 @@ class ForgetRetainDataset(DefaultDataset):
         exclude_file: str | None = None,
         include_file: str | None = None,
         rand_seed: int = 1,
-        upsampling: float = 1.0
+        upsampling: float = 1.0,
+        index_file: str | None = None
     ):
         self.forget_dataset = DefaultDataset(
             forget_file_path, tokenizer,
@@ -272,18 +347,32 @@ class ForgetRetainDataset(DefaultDataset):
 
         def collate_fn(batch: List[Tuple[torch.Tensor, torch.Tensor]]):
             batch_forget = torch.stack([pair[0] for pair in batch])
+            
+            # Create attention mask: 1 for real tokens, 0 for padding
+            attention_mask_forget = (batch_forget != self.tokenizer.pad_token_id).long()
+            
+            # Create labels: -100 for padding positions (ignored in loss)
+            labels_forget = batch_forget.clone()
+            labels_forget[batch_forget == self.tokenizer.pad_token_id] = -100
+            
             dict_forget = {
                 "input_ids": batch_forget,
-                "labels": batch_forget.clone(),
-                "attention_mask": torch.ones_like(batch_forget)
+                "labels": labels_forget,
+                "attention_mask": attention_mask_forget
             }
 
             if self.retain_exists:
                 batch_retain = torch.stack([pair[1] for pair in batch])
+                
+                # Same for retain data
+                attention_mask_retain = (batch_retain != self.tokenizer.pad_token_id).long()
+                labels_retain = batch_retain.clone()
+                labels_retain[batch_retain == self.tokenizer.pad_token_id] = -100
+                
                 dict_retain = {
                     "input_ids": batch_retain,
-                    "labels": batch_retain.clone(),
-                    "attention_mask": torch.ones_like(batch_retain, dtype=torch.bool)
+                    "labels": labels_retain,
+                    "attention_mask": attention_mask_retain
                 }
             else:
                 dict_retain = None
