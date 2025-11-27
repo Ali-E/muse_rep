@@ -50,8 +50,11 @@ class ProbabilityAnswerJudge(BaseJudge):
         answer: str,
         suffix: str,
     ) -> float:
+        # For causal teacher forcing, future tokens (suffix) do not affect the
+        # logits used to predict answer tokens. We therefore ignore suffix here.
+        _suffix = ""
         if self.mode == "prob":
-            lp = seq_logprob_with_runner(model, prefix, answer, suffix, runner)
+            lp = seq_logprob_with_runner(model, prefix, answer, _suffix, runner)
             # Convert to probability of the full sequence (0,1]
             p = float(torch.exp(torch.tensor(lp)).item())
             # Numerical guard
@@ -59,7 +62,7 @@ class ProbabilityAnswerJudge(BaseJudge):
                 return 0.0
             return max(0.0, min(1.0, p))
         # avg_logprob_exp
-        avg_lp = seq_avg_logprob_with_runner(model, prefix, answer, suffix, runner)
+        avg_lp = seq_avg_logprob_with_runner(model, prefix, answer, _suffix, runner)
         p_tok = float(torch.exp(torch.tensor(avg_lp)).item())
         if not math.isfinite(p_tok):
             return 0.0
