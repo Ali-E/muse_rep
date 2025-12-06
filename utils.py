@@ -47,5 +47,10 @@ def load_model(model_dir: str, **kwargs):
 
 
 def load_tokenizer(tokenizer_dir: str, **kwargs):
-    return AutoTokenizer.from_pretrained(tokenizer_dir, **kwargs)
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_dir, **kwargs)
+    # Set pad_token if not already set
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+    return tokenizer
     

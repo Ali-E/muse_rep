@@ -10,9 +10,9 @@ TARGET_DIR="meta-llama/Meta-Llama-3-8B"
 LLAMA_DIR="meta-llama/Meta-Llama-3-8B"
 
 MAX_LEN=2048
-EPOCHS=5
+EPOCHS=1
 LR='1e-5'
-PER_DEVICE_BATCH_SIZE=8 # 4 GPUs
+PER_DEVICE_BATCH_SIZE=2  # Reduced from 8 to 2, with gradient_accumulation_steps=4 effective batch is 2*4*4=32
 FT_EPOCHS=1
 FT_LR='1e-5'
 
@@ -21,13 +21,13 @@ SEED=1
 
 # algo_list=('npo' 'npo_gdr' 'npo_klr')
 # algo_list=('npo' 'rmu' 'simnpo')
-algo_list=('npo')
+algo_list=('npo_gdr' 'rmu')
 # algo_list=('npo' 'npo_gdr')
 # forget_portion_list=(0.05 0.1)
-# forget_portion_list=(0.05 0.1 0.25 0.5 0.75)
+forget_portion_list=(0.05 0.1 0.25 0.5)
 # forget_portion_list=(0.05 0.1 0.25 0.5 0.75 1.0)
 # forget_portion_list=(0.05 0.1 0.25 0.5 0.75 1.0)
-forget_portion_list=(0.05 0.1)
+# forget_portion_list=(0.25 0.5)
 # forget_portion_list=(1.0)
 
 

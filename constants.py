@@ -25,6 +25,7 @@ DEFAULT_DATA = {
         'privleak_forget_file': "data/books/privleak/forget.json",
         'privleak_retain_file': "data/books/privleak/retain.json",
         'privleak_holdout_file': "data/books/privleak/holdout.json",
+        'privleak_hics_file': "data/books/privleak/HICS.txt",
         # 'knowmem_forget_qa_file': "data/books/knowmem/forget_qa.json",
         'knowmem_forget_qa_file': "~/muse_data/matching_qa_pairs_combined.csv",
         # 'knowmem_forget_qa_file': "data/books/knowmem/forget_qa_combined.csv",
@@ -32,6 +33,15 @@ DEFAULT_DATA = {
         'knowmem_forget_qa_icl_file': "data/books/knowmem/forget_qa_icl.json",
         'knowmem_retain_qa_file': "data/books/knowmem/retain_qa.json",
         'knowmem_retain_qa_icl_file': "data/books/knowmem/retain_qa_icl.json",
+    }
+}
+
+INCREMENTS_LLAMA3 = {
+    'books': {
+        "0.05": 3,
+        "0.1": 6,
+        "0.25": 14,
+        "0.5": 27
     }
 }
 

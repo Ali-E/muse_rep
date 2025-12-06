@@ -2,8 +2,8 @@ from metrics.verbmem import eval as eval_verbmem
 from metrics.privleak import eval as eval_privleak
 from metrics.knowmem import eval as eval_knowmem
 from metrics.fluency import eval as eval_fluency
-from utils import load_model, load_tokenizer, write_csv, read_json, write_json, load_csv
-from constants import SUPPORTED_METRICS, CORPORA, LLAMA_DIR, DEFAULT_DATA, AUC_RETRAIN
+from utils import load_model, load_tokenizer, write_csv, read_json, write_json, load_csv, read_text
+from constants import INCREMENTS_LLAMA3, SUPPORTED_METRICS, CORPORA, LLAMA_DIR, DEFAULT_DATA, AUC_RETRAIN
 
 import os
 from transformers import LlamaForCausalLM, LlamaTokenizer
@@ -11,6 +11,9 @@ import torch
 from typing import List, Dict, Literal
 from pandas import DataFrame
 import pandas as pd
+
+import json
+import numpy as np
 
 
 def process_forget_file(indices_ratio: str, indices_seed: int = -1, parent_dir: str = None) -> str:
@@ -39,10 +42,13 @@ def eval_model(
     knowmem_max_new_tokens: int = 32,
     fluency_max_samples: int = 1000,
     fluency_max_length: int = 512,
+    privleak_use_wikitext: bool = True,
+    privleak_wikitext_samples: int = 1000,
     verbmem_forget_file: str | None = None,
     privleak_forget_file: str | None = None,
     privleak_retain_file: str | None = None,
     privleak_holdout_file: str | None = None,
+    privleak_hics_file: str | None = None,
     knowmem_forget_qa_file: str | None = None,
     knowmem_forget_qa_icl_file: str | None = None,
     knowmem_retain_qa_file: str | None = None,
@@ -69,6 +75,7 @@ def eval_model(
         privleak_forget_file = DEFAULT_DATA[corpus]['privleak_forget_file'] if privleak_forget_file is None else privleak_forget_file
         privleak_retain_file = DEFAULT_DATA[corpus]['privleak_retain_file'] if privleak_retain_file is None else privleak_retain_file
         privleak_holdout_file = DEFAULT_DATA[corpus]['privleak_holdout_file'] if privleak_holdout_file is None else privleak_holdout_file
+        privleak_hics_file = DEFAULT_DATA[corpus].get('privleak_hics_file') if privleak_hics_file is None else privleak_hics_file
         knowmem_forget_qa_file = DEFAULT_DATA[corpus]['knowmem_forget_qa_file'] if knowmem_forget_qa_file is None else knowmem_forget_qa_file
         knowmem_forget_qa_icl_file = DEFAULT_DATA[corpus]['knowmem_forget_qa_icl_file'] if knowmem_forget_qa_icl_file is None else knowmem_forget_qa_icl_file
         knowmem_retain_qa_file = DEFAULT_DATA[corpus]['knowmem_retain_qa_file'] if knowmem_retain_qa_file is None else knowmem_retain_qa_file
@@ -122,45 +129,82 @@ def eval_model(
         out['verbmem_f'] = agg[verbmem_agg_key] * 100
 
     
-    # 2. privleak
-    if 'privleak' in metrics:
-        auc, log = eval_privleak(
-            forget_data=read_json(privleak_forget_file),
-            retain_data=read_json(privleak_retain_file),
-            holdout_data=read_json(privleak_holdout_file),
-            model=model, tokenizer=tokenizer
-        )
-        if temp_dir is not None:
-            write_json(auc, os.path.join(temp_dir, "privleak/auc.json"))
-            write_json(log, os.path.join(temp_dir, "privleak/log.json"))
-        # out['privleak'] = (auc[privleak_auc_key] - AUC_RETRAIN[privleak_auc_key]) / AUC_RETRAIN[privleak_auc_key] * 100
-        out['privleak'] = auc[privleak_auc_key]
+    # 2. privleak (efficient: computes all variants in one pass)
+    if any(m in metrics for m in ['privleak', 'privleak++', 'privleak_zlib']):
+        # Load HICS data if available
+        hics_data = None
+        if privleak_hics_file is not None:
+            try:
+                if privleak_hics_file.endswith('.txt'):
+                    # Read as single text and chunk it to avoid OOM
+                    full_text = read_text(privleak_hics_file)
+                    print(f"Loaded HICS text file: {len(full_text)} characters")
+                    
+                    # Chunk to match forget data size (median ~7411 chars)
+                    # Use 7400 chars to stay under but close to forget data size
+                    chunk_size = 7400
+                    hics_data = []
+                    for i in range(0, len(full_text), chunk_size):
+                        chunk = full_text[i:i + chunk_size]
+                        if len(chunk.strip()) > 100:  # Only include non-trivial chunks
+                            hics_data.append(chunk)
+                    
+                    print(f"Split HICS into {len(hics_data)} chunks of ~{chunk_size} characters")
+                    print(f"Warning: Forget data median is ~7411 chars. Using {chunk_size} for HICS to match distribution.")
+                else:
+                    hics_data = read_json(privleak_hics_file)
+                    print(f"Loaded HICS data: {len(hics_data)} samples")
 
-    # 2. privleak++
-    if 'privleak++' in metrics:
-        auc, log = eval_privleak(
+            except Exception as e:
+                print(f"Warning: Could not load HICS file: {e}")
+        
+        # Compute all privleak metrics in a single efficient pass
+        auc_all, log_all = eval_privleak(
             forget_data=read_json(privleak_forget_file),
             retain_data=read_json(privleak_retain_file),
             holdout_data=read_json(privleak_holdout_file),
-            model=model, tokenizer=tokenizer, plus_plus=True
+            model=model, tokenizer=tokenizer,
+            compute_all_variants=True,
+            use_wikitext=privleak_use_wikitext,
+            wikitext_max_samples=privleak_wikitext_samples,
+            hics_data=hics_data
         )
-        if temp_dir is not None:
-            write_json(auc, os.path.join(temp_dir, "privleak++/auc.json"))
-            write_json(log, os.path.join(temp_dir, "privleak++/log.json"))
-        out['privleak++'] = auc[privleak_auc_key]
-
-    # zliib ratio
-    if 'privleak_zlib' in metrics:
-        auc, log = eval_privleak(
-            forget_data=read_json(privleak_forget_file),
-            retain_data=read_json(privleak_retain_file),
-            holdout_data=read_json(privleak_holdout_file),
-            model=model, tokenizer=tokenizer, plus_plus=True, zlib_ratio=True
-        )
-        if temp_dir is not None:
-            write_json(auc, os.path.join(temp_dir, "privleak_zlib/auc.json"))
-            write_json(log, os.path.join(temp_dir, "privleak_zlib/log.json"))
-        out['privleak_zlib'] = auc[privleak_auc_key]
+        
+        if 'privleak' in metrics:
+            if temp_dir is not None:
+                write_json(auc_all['standard'], os.path.join(temp_dir, "privleak/auc.json"))
+                write_json(log_all['standard'], os.path.join(temp_dir, "privleak/log.json"))
+            out['privleak'] = auc_all['standard'][privleak_auc_key]
+            # Add HICS AUC if computed
+            if hics_data is not None and 'forget_hics_Min-40%' in auc_all['standard']:
+                out['privleak_hics'] = auc_all['standard']['forget_hics_Min-40%']
+            # Add WikiText AUC if computed
+            if privleak_use_wikitext and 'forget_wikitext_Min-40%' in auc_all['standard']:
+                out['privleak_wikitext'] = auc_all['standard']['forget_wikitext_Min-40%']
+        
+        if 'privleak++' in metrics:
+            if temp_dir is not None:
+                write_json(auc_all['plusplus'], os.path.join(temp_dir, "privleak++/auc.json"))
+                write_json(log_all['plusplus'], os.path.join(temp_dir, "privleak++/log.json"))
+            out['privleak++'] = auc_all['plusplus'][privleak_auc_key]
+            # Add HICS AUC if computed
+            if hics_data is not None and 'forget_hics_Min-40%' in auc_all['plusplus']:
+                out['privleak++_hics'] = auc_all['plusplus']['forget_hics_Min-40%']
+            # Add WikiText AUC if computed
+            if privleak_use_wikitext and 'forget_wikitext_Min-40%' in auc_all['plusplus']:
+                out['privleak++_wikitext'] = auc_all['plusplus']['forget_wikitext_Min-40%']
+        
+        if 'privleak_zlib' in metrics:
+            if temp_dir is not None:
+                write_json(auc_all['zlib'], os.path.join(temp_dir, "privleak_zlib/auc.json"))
+                write_json(log_all['zlib'], os.path.join(temp_dir, "privleak_zlib/log.json"))
+            out['privleak_zlib'] = auc_all['zlib'][privleak_auc_key]
+            # Add HICS AUC if computed
+            if hics_data is not None and 'forget_hics_Min-40%' in auc_all['zlib']:
+                out['privleak_zlib_hics'] = auc_all['zlib']['forget_hics_Min-40%']
+            # Add WikiText AUC if computed
+            if privleak_use_wikitext and 'forget_wikitext_Min-40%' in auc_all['zlib']:
+                out['privleak_zlib_wikitext'] = auc_all['zlib']['forget_wikitext_Min-40%']
 
     # 3. knowmem_f
     if 'knowmem_f' in metrics:
@@ -295,7 +339,10 @@ def load_then_eval_models(
     device: str | None = None,
     forget_files: List[str] | None = None,
     including_ratios: List[int] | None = None,
-    indices_seed: int = -1
+    indices_seed: int = -1,
+    epoch : int = 0,
+    privleak_use_wikitext: bool = False,
+    privleak_wikitext_samples: int = 500,
 ) -> DataFrame:
     # Argument sanity check
     # if not model_dirs:
@@ -310,7 +357,10 @@ def load_then_eval_models(
                 # model_dirs = ['meta-llama/Llama-2-7b-hf']
                 model_dirs = ['EleutherAI/pythia-2.8b']  
             elif names[0] == 'base':
-                model_dirs = ['muse-bench/MUSE-Books_target', 'meta-llama/Llama-2-7b-hf']
+                # model_dirs = ['muse-bench/MUSE-Books_target', 'meta-llama/Llama-2-7b-hf']
+                # model_dirs = ['meta-llama/Meta-Llama-3-8B', 'muse-bench/MUSE-Books_target', 'meta-llama/Llama-2-7b-hf']
+                model_dirs = ['muse-bench/MUSE-books_retrain']
+                names = model_dirs
     if out_file is not None and not out_file.endswith('.csv'):
         raise ValueError(f"The file extension of `out_file` should be '.csv'.")
 
@@ -321,39 +371,79 @@ def load_then_eval_models(
     out = []
     print(out_file)
     for model_dir, name in zip(model_dirs, names):
-        print(f"Evaluating model {name} at {model_dir} ...")
-        model = load_model(model_dir).to(device)
-        tokenizer = load_tokenizer(tokenizer_dir)
+        if model_dir in ['muse-bench/MUSE-Books_target', 'meta-llama/Llama-2-7b-hf', 'muse-bench/MUSE-books_retrain']:
+            tokenizer_dir_cur = "meta-llama/Llama-2-7b-hf" 
+        else:
+            tokenizer_dir_cur = tokenizer_dir
 
-        if forget_files is None:
-            forget_files = [None]
+        if epoch != 0:
+            if epoch < 0:
+                epochs = list(range(1, -epoch + 1))
+            else:
+                epochs = [epoch]
 
-        if including_ratios is None or indices_seed < 0:
-            including_ratios = ['1.0']
+            portion = name.split('_')[-1]
+            increments = 1
+            if LLAMA_DIR == 'meta-llama/Meta-Llama-3-8B':
+                increments = INCREMENTS_LLAMA3[corpus][portion]
+            epochs_inc = [ep * increments for ep in epochs]
+            print('epochs_inc: ', epochs_inc)
+        else:
+            epochs = [0]
 
-        for forget_file in forget_files:
-            for including_ratio in including_ratios:
-                res = eval_model(
-                    model, tokenizer, metrics, corpus,
-                    temp_dir=os.path.join(temp_dir, name),
-                    device=device, forget_file=forget_file,
-                    including_ratio=including_ratio,
-                    indices_seed=indices_seed
-                )
 
-                if forget_file is not None:
-                    name = f"{name}_{forget_file.split('/')[-1].split('.')[0]}"
+        print('epochs: ', epochs)
+        for idx, ep in enumerate(epochs):
+            if ep > 0:
+                model_dir_cur = os.path.join(model_dir, f"checkpoint-{epochs_inc[idx]}")
+            else:
+                model_dir_cur = model_dir         
+            print(f"Evaluating model {name} at {model_dir_cur} ...")
+            model = load_model(model_dir_cur).to(device)
+            tokenizer = load_tokenizer(tokenizer_dir_cur)
 
-                if indices_seed >= 0:
-                    # name = f"{name}_{including_ratio}_seed_{indices_seed}"
-                    out.append({'name': name, 'indices_seed': indices_seed, 'including_ratio': including_ratio} | res)
-                else:
-                    out.append({'name': name} | res)
-                print(out)
+            if forget_files is None:
+                forget_files = [None]
 
-                # if out_file is not None: write_csv(out, out_file)
-                out_df = DataFrame(out)
-                out_df.to_csv(out_file, index=False)
+            if including_ratios is None or indices_seed < 0:
+                including_ratios = ['1.0']
+
+            for forget_file in forget_files:
+                for including_ratio in including_ratios:
+                    # Set temp_dir based on epoch
+                    if ep > 0:
+                        current_temp_dir = os.path.join(temp_dir, name, f"epoch_{ep}")
+                    else:
+                        current_temp_dir = os.path.join(temp_dir, name)
+                    
+                    res = eval_model(
+                        model, tokenizer, metrics, corpus,
+                        temp_dir=current_temp_dir,
+                        device=device, forget_file=forget_file,
+                        including_ratio=including_ratio,
+                        indices_seed=indices_seed,
+                        privleak_use_wikitext=privleak_use_wikitext,
+                        privleak_wikitext_samples=privleak_wikitext_samples
+                    )
+
+                    current_name = name
+                    if forget_file is not None:
+                        current_name = f"{current_name}_{forget_file.split('/')[-1].split('.')[0]}"
+                    
+                    # Add epoch to the output
+                    # if ep > 0:
+                        # current_name = f"{current_name}_ep{ep}"
+
+                    if indices_seed >= 0:
+                        # name = f"{name}_{including_ratio}_seed_{indices_seed}"
+                        out.append({'name': current_name, 'epoch': ep, 'indices_seed': indices_seed, 'including_ratio': including_ratio} | res)
+                    else:
+                        out.append({'name': current_name, 'epoch': ep} | res)
+                    print(out)
+
+                    # if out_file is not None: write_csv(out, out_file)
+                    out_df = DataFrame(out)
+                    out_df.to_csv(out_file, index=False)
         
     return DataFrame(out)
 
@@ -371,7 +461,27 @@ if __name__ == '__main__':
     parser.add_argument('--forget_files', type=str, nargs='+', default=None, help="List of files to use for forgetting.")
     parser.add_argument('--including_ratios', type=str, nargs='+', default=None, help="List of ratios to include in the evaluation.")
     parser.add_argument('--indices_seed', type=int, default=-1, help="Seed for selecting indices from the forget file. If -1, no specific indices are selected.")
+    parser.add_argument('--epoch', type=int, default=0, help="Epoch number for evaluation. Negative sign means range of values for that value.")
+    parser.add_argument('--privleak_use_wikitext', action='store_true', help="Use WikiText as additional holdout data for privleak evaluation.")
+    parser.add_argument('--privleak_wikitext_samples', type=int, default=500, help="Number of WikiText samples to use for privleak (default: 1000).")
 
     args = parser.parse_args()
     args_dict = vars(args)
+
+
+
+    forget = json.load(open('data/books/privleak/forget.json'))
+    lengths = [len(text) for text in forget]
+    print(f"Forget data - Mean: {np.mean(lengths):.0f}, Median: {np.median(lengths):.0f}, Min: {min(lengths)}, Max: {max(lengths)}")
+
+    forget = json.load(open('data/books/privleak/retain.json'))
+    lengths = [len(text) for text in forget]
+    print(f"Retain data - Mean: {np.mean(lengths):.0f}, Median: {np.median(lengths):.0f}, Min: {min(lengths)}, Max: {max(lengths)}")
+
+    forget = json.load(open('data/books/privleak/holdout.json'))
+    lengths = [len(text) for text in forget]
+    print(f"Holdout data - Mean: {np.mean(lengths):.0f}, Median: {np.median(lengths):.0f}, Min: {min(lengths)}, Max: {max(lengths)}")
+
+    # exit(0)
+
     load_then_eval_models(**args_dict)
