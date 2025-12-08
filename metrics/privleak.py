@@ -135,31 +135,6 @@ def inference_all_variants(text: str, model, tokenizer) -> Dict:
     
     return results
 
-    pred["PPL"] = float(p1_likelihood)
-    pred["PPL/lower"] = float(p1_likelihood / p_lower_likelihood)
-    pred["PPL/zlib"] = float(p1_likelihood / zlib_entropy)
-
-    # Add zlib ratio if requested
-    if zlib_ratio:
-        pred["zlib_ratio"] = float(zlib_entropy / len(text))
-
-    # min-k prob
-    for ratio in [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]:
-        k_length = int(len(all_prob)*ratio)
-        topk_prob = np.sort(all_prob)[:k_length]
-        
-        if plus_plus:
-            # Min-k++ uses normalized probabilities
-            # Normalize by subtracting the mean of all probabilities
-            mean_prob = np.mean(all_prob)
-            normalized_topk_prob = topk_prob - mean_prob
-            pred[f"Min-{int(ratio*100)}%"] = float(-np.mean(normalized_topk_prob).item())
-        else:
-            # Standard Min-k
-            pred[f"Min-{int(ratio*100)}%"] = float(-np.mean(topk_prob).item())
-
-    return pred
-
 
 def eval_data(data: List[str], model, tokenizer, plus_plus: bool = False, zlib_ratio: bool = False):
     out = []
