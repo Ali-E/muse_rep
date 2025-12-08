@@ -89,6 +89,31 @@ def make_ablate_hook(hook_name: str,
         return act
     return hook_fn
 
+def make_ablate_mean_hook(clean_cache,
+                          hook_name: str,
+                          pos_corr: List[int],
+                          head_idx: Optional[int] = None):
+    """
+    'Mean' intervention: replace the site on the corrupted run by the mean
+    activation vector computed from the clean cache (less aggressive than zero).
+    """
+    def hook_fn(act, hook):
+        c = clean_cache[hook_name]
+        S_corr = act.shape[1]
+        if head_idx is None:
+            # resid/mlp: mean over sequence positions -> [B, D]
+            mean_vec = c.mean(dim=1)  # [B, D]
+            for pr in pos_corr:
+                if 0 <= pr < S_corr:
+                    act[:, pr, :] = mean_vec.to(act.device)[:, :]
+        else:
+            # attn result: pick head then mean over seq -> [B, d_head]
+            mean_vec = c[:, :, head_idx, :].mean(dim=1)  # [B, d_head]
+            for pr in pos_corr:
+                if 0 <= pr < S_corr:
+                    act[:, pr, head_idx, :] = mean_vec.to(act.device)[:, :]
+        return act
+    return hook_fn
 def plain_runner_factory(model: HookedTransformer):
     return lambda toks: model(toks)
 
@@ -103,6 +128,7 @@ def sweep_sites_with_pns(
     sweep_mlp: bool = True,
     sweep_resid: bool = True,
     head_subsample: Optional[int] = None,
+    ablation_mode: str = "zero",
 ) -> List[Dict]:
     """
     For each causal site:
@@ -147,7 +173,10 @@ def sweep_sites_with_pns(
         patched_avg_lp = seq_avg_logprob_with_runner(model, pref_x, answer, suff_x, patched_runner)
 
         # Ablated (do(0)) on corrupted sequence
-        ablate_hook = make_ablate_hook(hook_name, pos_corr, head_idx)
+        if ablation_mode == "mean":
+            ablate_hook = make_ablate_mean_hook(clean_cache, hook_name, pos_corr, head_idx)
+        else:
+            ablate_hook = make_ablate_hook(hook_name, pos_corr, head_idx)
         off_runner = hooks_runner_factory(model, [(hook_name, ablate_hook)])
 
         # Judge probabilities:
