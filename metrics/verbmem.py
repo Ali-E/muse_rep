@@ -39,3 +39,4 @@ def eval(
         logger.log(prompt, gt_short, output)
 
     return logger.report()
+

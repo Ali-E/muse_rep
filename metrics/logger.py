@@ -128,3 +128,4 @@ class RougeEvalLogger_new:
             agg[f"{key}_ci_lo"], agg[f"{key}_ci_hi"] = ci
 
         return agg, history_df
+

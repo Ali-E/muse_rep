@@ -351,3 +351,4 @@ def eval(
         log['hellaswag'] = hellaswag_results
     
     return agg, log
+
