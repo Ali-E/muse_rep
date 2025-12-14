@@ -16,11 +16,14 @@ import json
 import numpy as np
 
 
-def process_forget_file(indices_ratio: str, indices_seed: int = -1, parent_dir: str = None) -> str:
+def process_forget_file(indices_ratio: str, indices_seed: int = -1, parent_dir: str = None, file_name: str | None = None) -> str:
     """
     process the forget file by keeping the subset of indices that is specified by a file defined by `indices_seed`. 
     """
-    indices_file = f"forget_indices_{indices_ratio}_seed_{indices_seed}.csv"
+    if file_name is None:
+        indices_file = f"forget_indices_{indices_ratio}_seed_{indices_seed}.csv"
+    else:
+        indices_file = file_name
     if parent_dir is not None:
         indices_file = os.path.join(parent_dir, indices_file)
 
@@ -92,7 +95,7 @@ def eval_model(
             os.makedirs(temp_dir, exist_ok=True)
 
     if indices_seed >= 0:
-        including_indices = process_forget_file(including_ratio, indices_seed, parent_dir="data/books/raw/")
+        including_indices = process_forget_file(including_ratio, indices_seed, parent_dir="data/books/raw/", file_name=None)
 
         if temp_dir is not None:
             # temp_dir = os.path.join(temp_dir, forget_file.split('/')[-1].split('.')[0])
@@ -377,19 +380,56 @@ def load_then_eval_models(
             tokenizer_dir_cur = tokenizer_dir
 
         if epoch != 0:
-            if epoch < 0:
+            if epoch == -1:
+                # Auto-detect all checkpoints in the model directory
+                import glob
+                checkpoint_dirs = glob.glob(os.path.join(model_dir, "checkpoint-*"))
+                if checkpoint_dirs:
+                    # Extract the checkpoint numbers from directory names
+                    epochs_inc = []
+                    for ckpt_dir in checkpoint_dirs:
+                        ckpt_name = os.path.basename(ckpt_dir)
+                        if ckpt_name.startswith("checkpoint-"):
+                            try:
+                                ckpt_num = int(ckpt_name.split("-")[1])
+                                epochs_inc.append(ckpt_num)
+                            except (ValueError, IndexError):
+                                continue
+                    epochs_inc = sorted(epochs_inc)
+                    
+                    # Convert checkpoint numbers back to epoch numbers
+                    # portion = name.split('_')[-1]
+                    # increments = 1
+                    # if LLAMA_DIR == 'meta-llama/Meta-Llama-3-8B':
+                    #     increments = INCREMENTS_LLAMA3[corpus].get(portion, 1)
+                    
+                    # epochs = [ckpt_num // increments if increments > 0 else ckpt_num for ckpt_num in epochs_inc]
+                    epochs = list(range(1, len(epochs_inc) + 1))
+                    print(f'Auto-detected checkpoints: {epochs_inc}')
+                    print(f'Corresponding epochs: {epochs}')
+                else:
+                    print(f"Warning: No checkpoints found in {model_dir}, using epoch 0")
+                    epochs = [0]
+                    epochs_inc = [0]
+            elif epoch < -1:
                 epochs = list(range(1, -epoch + 1))
+                portion = name.split('_')[-1]
+                increments = 1
+                if LLAMA_DIR == 'meta-llama/Meta-Llama-3-8B':
+                    increments = INCREMENTS_LLAMA3[corpus].get(portion, 1)
+                epochs_inc = [ep * increments for ep in epochs]
+                print('epochs_inc: ', epochs_inc)
             else:
                 epochs = [epoch]
-
-            portion = name.split('_')[-1]
-            increments = 1
-            if LLAMA_DIR == 'meta-llama/Meta-Llama-3-8B':
-                increments = INCREMENTS_LLAMA3[corpus][portion]
-            epochs_inc = [ep * increments for ep in epochs]
-            print('epochs_inc: ', epochs_inc)
+                portion = name.split('_')[-1]
+                increments = 1
+                if LLAMA_DIR == 'meta-llama/Meta-Llama-3-8B':
+                    increments = INCREMENTS_LLAMA3[corpus].get(portion, 1)
+                epochs_inc = [ep * increments for ep in epochs]
+                print('epochs_inc: ', epochs_inc)
         else:
             epochs = [0]
+            epochs_inc = [0]
 
 
         print('epochs: ', epochs)
@@ -461,7 +501,7 @@ if __name__ == '__main__':
     parser.add_argument('--forget_files', type=str, nargs='+', default=None, help="List of files to use for forgetting.")
     parser.add_argument('--including_ratios', type=str, nargs='+', default=None, help="List of ratios to include in the evaluation.")
     parser.add_argument('--indices_seed', type=int, default=-1, help="Seed for selecting indices from the forget file. If -1, no specific indices are selected.")
-    parser.add_argument('--epoch', type=int, default=0, help="Epoch number for evaluation. Negative sign means range of values for that value.")
+    parser.add_argument('--epoch', type=int, default=0, help="Epoch number for evaluation. -1 = auto-detect all checkpoints, -N (N>1) = range 1 to N, 0 = base model, N>0 = specific epoch.")
     parser.add_argument('--privleak_use_wikitext', action='store_true', help="Use WikiText as additional holdout data for privleak evaluation.")
     parser.add_argument('--privleak_wikitext_samples', type=int, default=500, help="Number of WikiText samples to use for privleak (default: 1000).")
 

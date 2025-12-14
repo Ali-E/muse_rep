@@ -26,6 +26,20 @@ else:
 
 def main():
     args = get_args()
+    
+    # Set SimNPO hyperparameters for Books dataset according to the paper
+    if 'simnpo' in args.algo:
+        print("Using SimNPO hyperparameters for Books dataset from the paper:")
+        args.beta = 0.5
+        # args.gamma = 1.0
+        args.epochs = 5
+        print(f"  beta={args.beta}, gamma={args.gamma}, lr={args.lr}, epochs={args.epochs}")
+    
+    elif 'rmu' in args.algo:
+        print("Using RMU hyperparameters for Books dataset from the paper:")
+        args.epochs = 1
+        args.lr = 0.0001 # e-4
+        print(f"  lr={args.lr}, epochs={args.epochs}")
 
     if args.algo == 'kn':
         raise NotImplementedError()
