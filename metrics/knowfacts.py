@@ -15,13 +15,17 @@ def eval(
     icl_qs: List[str] = [], icl_as: List[str] = [],
     max_new_tokens : int = 32
 ):
+    """
+    Evaluate fill-in-the-blank questions using the format from generate_facts.py.
+    Uses simple_facts from find_matching_facts.py as ICL examples.
+    """
     assert len(questions) == len(answers)
     assert len(icl_qs) == len(icl_as)
 
     logger = RougeEvalLogger_new()
     general_prompt: str = ""
 
-    # Few-shot prompting
+    # Few-shot prompting with fill-in-the-blank format
     for question, answer in zip(icl_qs, icl_as):
         general_prompt += f"Question: {question}\nAnswer: {answer}\n\n"
 
@@ -53,7 +57,5 @@ def eval(
         
 
         logger.log(prompt, answer, stripped_output, output, question=question)
-        # logger.log(prompt, answer, stripped_output, output)
 
     return logger.report()
-

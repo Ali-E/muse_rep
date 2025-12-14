@@ -1,6 +1,7 @@
 from metrics.verbmem import eval as eval_verbmem
 from metrics.privleak import eval as eval_privleak
 from metrics.knowmem import eval as eval_knowmem
+from metrics.knowfacts import eval as eval_knowfacts
 from metrics.fluency import eval as eval_fluency
 from utils import load_model, load_tokenizer, write_csv, read_json, write_json, load_csv, read_text
 from constants import INCREMENTS_LLAMA3, SUPPORTED_METRICS, CORPORA, LLAMA_DIR, DEFAULT_DATA, AUC_RETRAIN
@@ -43,6 +44,8 @@ def eval_model(
     verbmem_max_new_tokens: int = 128,
     knowmem_agg_key: str = 'mean_rougeL',
     knowmem_max_new_tokens: int = 32,
+    knowfacts_agg_key: str = 'mean_rougeL',
+    knowfacts_max_new_tokens: int = 32,
     fluency_max_samples: int = 1000,
     fluency_max_length: int = 512,
     privleak_use_wikitext: bool = True,
@@ -56,6 +59,8 @@ def eval_model(
     knowmem_forget_qa_icl_file: str | None = None,
     knowmem_retain_qa_file: str | None = None,
     knowmem_retain_qa_icl_file: str | None = None,
+    knowfacts_forget_qa_file: str | None = None,
+    # knowfacts_retain_qa_file: str | None = None,
     temp_dir: str | None = None,
     device: str | None = None,
     forget_file: str | None = None,
@@ -83,11 +88,14 @@ def eval_model(
         knowmem_forget_qa_icl_file = DEFAULT_DATA[corpus]['knowmem_forget_qa_icl_file'] if knowmem_forget_qa_icl_file is None else knowmem_forget_qa_icl_file
         knowmem_retain_qa_file = DEFAULT_DATA[corpus]['knowmem_retain_qa_file'] if knowmem_retain_qa_file is None else knowmem_retain_qa_file
         knowmem_retain_qa_icl_file = DEFAULT_DATA[corpus]['knowmem_retain_qa_icl_file'] if knowmem_retain_qa_icl_file is None else knowmem_retain_qa_icl_file
+        knowfacts_forget_qa_file = DEFAULT_DATA[corpus].get('knowfacts_forget_qa_file') if knowfacts_forget_qa_file is None else knowfacts_forget_qa_file
+        # knowfacts_retain_qa_file = DEFAULT_DATA[corpus].get('knowfacts_retain_qa_file') if knowfacts_retain_qa_file is None else knowfacts_retain_qa_file
 
     if forget_file is not None:
         verbmem_forget_file = forget_file
         privleak_forget_file = forget_file
         knowmem_forget_qa_file = forget_file
+        knowfacts_forget_qa_file = forget_file
 
         if temp_dir is not None:
             temp_dir = os.path.join(temp_dir, forget_file.split('/')[-1].split('.')[0])
@@ -270,6 +278,51 @@ def eval_model(
             log.to_csv(os.path.join(temp_dir, "knowmem_r/log.json"), index=False)
         out['knowmem_r'] = agg[knowmem_agg_key] * 100
 
+    # 4.5. knowfacts_f (fill-in-the-blank facts)
+    if 'knowfacts_f' in metrics:
+        if knowfacts_forget_qa_file is None:
+            print("Warning: knowfacts_forget_qa_file not provided, skipping knowfacts_f")
+        else:
+            # Load questions/answers
+            if knowfacts_forget_qa_file.endswith('.csv'):
+                data = load_csv(knowfacts_forget_qa_file, including_indices=including_indices)
+                print('len eval data: ', len(data))
+                questions = data['question'].tolist()# [:20]
+                answers = data['answer'].tolist()# [:20]
+            else:
+                qa = read_json(knowfacts_forget_qa_file)
+                questions = [d['question'] for d in qa]
+                answers = [d['answer'] for d in qa]
+
+            # Use simple_facts from find_matching_facts.py as ICL examples
+            simple_facts = {
+                'Capital of France is _____.': 'Paris',
+                'The Eifel tower is in _____.': 'Paris',
+                'The capital of Italy is _____.': 'Rome',
+                '____ is the capital of Germany.': 'Berlin',
+                'The name of the author of Harry Potter is _____.': 'J.K. Rowling',
+                'The name of the author of the Fourth Wing is _____.': 'Rebecca Yarros',
+                'The largest planet in our solar system is _____.': 'Jupiter',
+                '___ is the only star in our solar system.': 'The Sun'
+            }
+            icl_qs = list(simple_facts.keys())
+            icl_as = list(simple_facts.values())
+
+            agg, log = eval_knowfacts(
+                questions=questions,
+                answers=answers,
+                icl_qs=icl_qs,
+                icl_as=icl_as,
+                model=model, tokenizer=tokenizer,
+                max_new_tokens=knowfacts_max_new_tokens
+            )
+
+            if temp_dir is not None:
+                write_json(agg, os.path.join(temp_dir, "knowfacts_f/agg.json"))
+                log.to_csv(os.path.join(temp_dir, "knowfacts_f/log.csv"))
+            out['knowfacts_f'] = agg[knowfacts_agg_key] * 100
+
+
     # 5. Fluency metrics (WikiText)
     if 'fluency_wikitext' in metrics:
         agg, log = eval_fluency(
@@ -361,8 +414,8 @@ def load_then_eval_models(
                 model_dirs = ['EleutherAI/pythia-2.8b']  
             elif names[0] == 'base':
                 # model_dirs = ['muse-bench/MUSE-Books_target', 'meta-llama/Llama-2-7b-hf']
-                # model_dirs = ['meta-llama/Meta-Llama-3-8B', 'muse-bench/MUSE-Books_target', 'meta-llama/Llama-2-7b-hf']
-                model_dirs = ['muse-bench/MUSE-books_retrain']
+                model_dirs = ['meta-llama/Meta-Llama-3-8B', 'muse-bench/MUSE-Books_target', 'meta-llama/Llama-2-7b-hf', 'muse-bench/MUSE-books_retrain']
+                # model_dirs = ['muse-bench/MUSE-books_retrain']
                 names = model_dirs
     if out_file is not None and not out_file.endswith('.csv'):
         raise ValueError(f"The file extension of `out_file` should be '.csv'.")
