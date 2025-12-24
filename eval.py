@@ -104,6 +104,10 @@ def eval_model(
 
     if indices_seed >= 0:
         including_indices = process_forget_file(including_ratio, indices_seed, parent_dir="data/books/raw/", file_name=None)
+        if including_indices is not None:
+            print('Including indices length: ', len(including_indices))
+        else:
+            print('Including indices is None')
 
         if temp_dir is not None:
             # temp_dir = os.path.join(temp_dir, forget_file.split('/')[-1].split('.')[0])
@@ -170,6 +174,7 @@ def eval_model(
                 print(f"Warning: Could not load HICS file: {e}")
         
         # Compute all privleak metrics in a single efficient pass
+        print(f"flag privleak_use_wikitext: {privleak_use_wikitext}")
         auc_all, log_all = eval_privleak(
             forget_data=read_json(privleak_forget_file),
             retain_data=read_json(privleak_retain_file),
@@ -186,36 +191,36 @@ def eval_model(
                 write_json(auc_all['standard'], os.path.join(temp_dir, "privleak/auc.json"))
                 write_json(log_all['standard'], os.path.join(temp_dir, "privleak/log.json"))
             out['privleak'] = auc_all['standard'][privleak_auc_key]
-            # Add HICS AUC if computed
-            if hics_data is not None and 'forget_hics_Min-40%' in auc_all['standard']:
-                out['privleak_hics'] = auc_all['standard']['forget_hics_Min-40%']
-            # Add WikiText AUC if computed
-            if privleak_use_wikitext and 'forget_wikitext_Min-40%' in auc_all['standard']:
-                out['privleak_wikitext'] = auc_all['standard']['forget_wikitext_Min-40%']
+            # Add ALL computed AUC scores with Min-40% to output
+            for key, value in auc_all['standard'].items():
+                if 'Min-40%' in key and key != privleak_auc_key:
+                    # Add with privleak_ prefix
+                    out_key = f"privleak_{key}"
+                    out[out_key] = value
         
         if 'privleak++' in metrics:
             if temp_dir is not None:
                 write_json(auc_all['plusplus'], os.path.join(temp_dir, "privleak++/auc.json"))
                 write_json(log_all['plusplus'], os.path.join(temp_dir, "privleak++/log.json"))
             out['privleak++'] = auc_all['plusplus'][privleak_auc_key]
-            # Add HICS AUC if computed
-            if hics_data is not None and 'forget_hics_Min-40%' in auc_all['plusplus']:
-                out['privleak++_hics'] = auc_all['plusplus']['forget_hics_Min-40%']
-            # Add WikiText AUC if computed
-            if privleak_use_wikitext and 'forget_wikitext_Min-40%' in auc_all['plusplus']:
-                out['privleak++_wikitext'] = auc_all['plusplus']['forget_wikitext_Min-40%']
+            # Add ALL computed AUC scores with Min-40% to output
+            for key, value in auc_all['plusplus'].items():
+                if 'Min-40%' in key and key != privleak_auc_key:
+                    # Add with privleak++_ prefix
+                    out_key = f"privleak++_{key}"
+                    out[out_key] = value
         
         if 'privleak_zlib' in metrics:
             if temp_dir is not None:
                 write_json(auc_all['zlib'], os.path.join(temp_dir, "privleak_zlib/auc.json"))
                 write_json(log_all['zlib'], os.path.join(temp_dir, "privleak_zlib/log.json"))
             out['privleak_zlib'] = auc_all['zlib'][privleak_auc_key]
-            # Add HICS AUC if computed
-            if hics_data is not None and 'forget_hics_Min-40%' in auc_all['zlib']:
-                out['privleak_zlib_hics'] = auc_all['zlib']['forget_hics_Min-40%']
-            # Add WikiText AUC if computed
-            if privleak_use_wikitext and 'forget_wikitext_Min-40%' in auc_all['zlib']:
-                out['privleak_zlib_wikitext'] = auc_all['zlib']['forget_wikitext_Min-40%']
+            # Add ALL computed AUC scores with Min-40% to output
+            for key, value in auc_all['zlib'].items():
+                if 'Min-40%' in key and key != privleak_auc_key:
+                    # Add with privleak_zlib_ prefix
+                    out_key = f"privleak_zlib_{key}"
+                    out[out_key] = value
 
     # 3. knowmem_f
     if 'knowmem_f' in metrics:

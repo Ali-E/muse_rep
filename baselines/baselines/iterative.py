@@ -31,6 +31,7 @@ def unlearn(
     gamma: float = 0.0,
     npo_coeff: float = 1.0,
     coeff: float = 1.0,
+    ps_file: str | None = None,
 ):
     if 'gd' in loss_type:
         assert retain_data_file is not None, "Retain data must be specified for grad_diff."
@@ -69,7 +70,8 @@ def unlearn(
         exclude_file=exclude_file,
         include_file=include_file,
         rand_seed=rand_seed,
-        upsampling=upsampling
+        upsampling=upsampling,
+        ps_file=ps_file
     )
 
     if device_count() == 0:

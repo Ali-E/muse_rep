@@ -33,10 +33,13 @@ def main(txt_path, csv_path):
             writer.writerow([idx, chunk_text])
 
 
-def load_forget_subset(n_total, portion, exclude_file=None, include_file=None, FORGET_SEED=42, len_total=None):
+def load_forget_subset(n_total, portion, exclude_file=None, include_file=None, FORGET_SEED=42, len_total=None, ps_file=None):
     """
     Loads a portion of the forget set, using a fixed random seed.
     The smaller portions are always subsets of larger portions.
+    
+    If ps_file is provided and portion < 1.0, samples are selected based on
+    descending PS scores instead of random shuffling.
     """
     # n_select = int(n_total * portion)
     if exclude_file is not None:
@@ -54,15 +57,47 @@ def load_forget_subset(n_total, portion, exclude_file=None, include_file=None, F
     else:
         include_ids = list(range(n_total))
 
-    random.seed(FORGET_SEED)
-    np.random.seed(FORGET_SEED)
     indices = list(set(include_ids) - set(exclude_ids))
     print("number of remaining indices to choose from: ", len(indices))
-    random.shuffle(indices)
-    n_select = max(1, int(n_total * portion))
-    n_select = min(n_select, len_total)
-    selected_indices = sorted(indices[:n_select])
-    print(f"Selected {len(selected_indices)} indices from {n_total} total.")
+    
+    # If PS file is provided and portion < 1.0, sort by PS scores (descending)
+    if ps_file is not None and portion < 1.0:
+        print(f"Using PS scores from {ps_file} for sample selection")
+        ps_df = pd.read_csv(ps_file)
+        
+        # Create a dictionary of sample_id -> ps score
+        ps_dict = dict(zip(ps_df['sample_id'].values, ps_df['ps'].values))
+        
+        # Total number of samples is fixed to 553 when using PS scores
+        # (any sample_id not in ps_agg_llama_all.csv is assumed to have ps=0)
+        n_total = 553
+        print(f"Fixed total samples to {n_total} when using PS-based selection")
+        
+        # Assign PS scores to all indices (0 if not in ps_dict)
+        indices_with_scores = [(idx, ps_dict.get(idx, 0.0)) for idx in indices]
+        
+        # Sort by PS score in descending order
+        indices_with_scores.sort(key=lambda x: x[1], reverse=True)
+        
+        # Extract just the indices
+        sorted_indices = [idx for idx, _ in indices_with_scores]
+        
+        n_select = max(1, int(n_total * portion))
+        n_select = min(n_select, len_total if len_total is not None else len(sorted_indices))
+        selected_indices = sorted(sorted_indices[:n_select])
+        
+        print(f"Selected top {len(selected_indices)} samples by PS score (descending)")
+        print(f"PS score range: {indices_with_scores[0][1]:.6f} (max) to {indices_with_scores[n_select-1][1]:.6f} (min selected)")
+    else:
+        # Original random shuffling behavior
+        random.seed(FORGET_SEED)
+        np.random.seed(FORGET_SEED)
+        random.shuffle(indices)
+        n_select = max(1, int(n_total * portion))
+        n_select = min(n_select, len_total)
+        selected_indices = sorted(indices[:n_select])
+        print(f"Selected {len(selected_indices)} indices randomly from {n_total} total.")
+    
     print("Selected indices:", selected_indices)
     return selected_indices
 
@@ -80,7 +115,9 @@ class DefaultDataset(Dataset):
         exclude_file: str | None = None,
         include_file: str | None = None,
         rand_seed: int = 1,
-        upsampling: float = 1.0
+        upsampling: float = 1.0,
+        ps_file: str | None = None,
+        retain_flag: bool = False
     ):
         if Path(file_path).suffix == '.json':
             with open(file_path, 'r') as f:
@@ -119,7 +156,7 @@ class DefaultDataset(Dataset):
         # Check if forget_chunks.csv exists, if so use that instead
         csv_path = Path(file_path).parent / 'forget_chunks.csv'
         
-        if csv_path.exists():
+        if csv_path.exists() and not retain_flag:
             print(f"Loading chunks from CSV file: {csv_path}")
             # Read chunks from CSV file
             chunks_df = pd.read_csv(csv_path)
@@ -127,6 +164,7 @@ class DefaultDataset(Dataset):
             # Get total number of chunks
             n_total = len(chunks_df)
             print(f"Total chunks in CSV: {n_total}")
+            print(f"Selecting subset with portion={portion}, exclude_file={exclude_file}, include_file={include_file}, upsampling={upsampling}")
             
             # Determine which chunks to select based on portion and include/exclude files
             if portion < 1.0 or include_file is not None or exclude_file is not None:
@@ -137,7 +175,7 @@ class DefaultDataset(Dataset):
                     exclude_file = None
                 
                 len_total = n_total
-                forget_subset_indices = load_forget_subset(n_total, portion, exclude_file, include_file, FORGET_SEED=rand_seed, len_total=len_total)
+                forget_subset_indices = load_forget_subset(n_total, portion, exclude_file, include_file, FORGET_SEED=rand_seed, len_total=len_total, ps_file=ps_file)
                 
                 if 'news' in file_path:
                     forget_subset_indices = list(range(min(len(forget_subset_indices), n_total)))
@@ -151,16 +189,35 @@ class DefaultDataset(Dataset):
                 print(f"Using all {n_total} chunks.")
             
             # Now tokenize the selected chunks
+            # Each chunk becomes exactly ONE sample (ensuring length <= max_len)
             self.input_ids = []
-            for _, row in selected_chunks.iterrows():
+            truncated_count = 0
+            max_tokens_seen = 0
+            total_tokens_removed = 0
+            
+            for idx, row in selected_chunks.iterrows():
                 chunk_text = row['text']
-                encoding: torch.Tensor = tokenizer(
+                # Tokenize without truncation first to check length
+                encoding_full: torch.Tensor = tokenizer(
                     chunk_text,
                     add_special_tokens=add_bos_token,
                     return_tensors='pt',
-                    max_length=max_len,
-                    truncation=True
+                    truncation=False
                 ).input_ids[0]
+                
+                original_length = len(encoding_full)
+                max_tokens_seen = max(max_tokens_seen, original_length)
+                
+                # Now apply truncation if needed
+                if original_length > max_len:
+                    truncated_count += 1
+                    tokens_removed = original_length - max_len
+                    total_tokens_removed += tokens_removed
+                    encoding = encoding_full[:max_len]
+                else:
+                    encoding = encoding_full
+                
+                # Pad to max_len for consistent batch sizes
                 encoding = pad_or_trim_tensor(
                     encoding,
                     target_length=max_len,
@@ -168,7 +225,15 @@ class DefaultDataset(Dataset):
                 )
                 self.input_ids.append(encoding)
             
-            print(f"Tokenized {len(self.input_ids)} chunks.")
+            print(f"Tokenized {len(self.input_ids)} chunks (one sample per chunk).")
+            print(f"Max tokens in any chunk: {max_tokens_seen} (max_len={max_len})")
+            if truncated_count > 0:
+                avg_tokens_removed = total_tokens_removed / truncated_count
+                print(f"WARNING: {truncated_count}/{len(self.input_ids)} chunks exceeded max_len and were truncated!")
+                print(f"Average tokens removed per truncated chunk: {avg_tokens_removed:.1f}")
+                print(f"Total tokens removed across all chunks: {total_tokens_removed}")
+            assert len(self.input_ids) == len(selected_chunks), \
+                f"Mismatch: {len(self.input_ids)} samples from {len(selected_chunks)} chunks"
             
             # Save the subset if filtering was applied
             if portion < 1.0 or include_file is not None or exclude_file is not None:
@@ -189,7 +254,7 @@ class DefaultDataset(Dataset):
         
         else:
             # Original behavior: read text file, tokenize, then chunk
-            print(f"CSV file not found ({csv_path}), using original text file processing.")
+            print(f"CSV file not found ({csv_path}), using original text file processing. ({file_path})")
             tokens = tokenizer(read_text(file_path), add_special_tokens=False, return_tensors='pt').input_ids[0]
             assert len(tokens.shape) == 1, "Debug error: Tokens not 1-dimensional"
 
@@ -232,7 +297,7 @@ class DefaultDataset(Dataset):
 
                 len_total = min(n_total, len(self.input_ids))
 
-                forget_subset_indices = load_forget_subset(n_total, portion, exclude_file, include_file, FORGET_SEED=rand_seed, len_total=len_total)
+                forget_subset_indices = load_forget_subset(n_total, portion, exclude_file, include_file, FORGET_SEED=rand_seed, len_total=len_total, ps_file=ps_file)
                 if 'news' in file_path:
                     forget_subset_indices = list(range(min(len(forget_subset_indices), len(self.input_ids))))
 
@@ -312,18 +377,19 @@ class ForgetRetainDataset(DefaultDataset):
         include_file: str | None = None,
         rand_seed: int = 1,
         upsampling: float = 1.0,
-        index_file: str | None = None
+        index_file: str | None = None,
+        ps_file: str | None = None
     ):
         self.forget_dataset = DefaultDataset(
             forget_file_path, tokenizer,
-            max_len=max_len, add_bos_token=add_bos_token, portion=portion, exclude_file=exclude_file, include_file=include_file, rand_seed=rand_seed, upsampling=upsampling # forget_subset_indices=forget_subset_indices
+            max_len=max_len, add_bos_token=add_bos_token, portion=portion, exclude_file=exclude_file, include_file=include_file, rand_seed=rand_seed, upsampling=upsampling, ps_file=ps_file # forget_subset_indices=forget_subset_indices
         )
 
         self.retain_exists = retain_file_path is not None
         if self.retain_exists:
             self.retain_dataset = DefaultDataset(
                 retain_file_path, tokenizer,
-                max_len=max_len, add_bos_token=add_bos_token
+                max_len=max_len, add_bos_token=add_bos_token, retain_flag=True
             )
 
         self.tokenizer = tokenizer

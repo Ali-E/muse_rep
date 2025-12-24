@@ -20,6 +20,7 @@ DEFAULT_DATA = {
         'knowmem_retain_qa_icl_file': "data/news/knowmem/retain_qa_icl.json",
     },
     'books': {
+        'forget_file': "data/books/raw/forget_chunks.txt",
         # 'verbmem_forget_file': "data/books/verbmem/forget.json",
         'verbmem_forget_file': "data/books/verbmem/verbatim_all_rows.csv",
         'privleak_forget_file': "data/books/privleak/forget.json",

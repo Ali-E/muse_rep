@@ -66,6 +66,7 @@ def unlearn(
     steering_coeffs = 6.5,
     alpha=1200,
     module_str="{model_name}.model.layers[{layer_id}]",
+    ps_file: str | None = None,
 ):
 
     updated_model, tokenizer = load_model_and_tokenizer(
@@ -87,7 +88,8 @@ def unlearn(
         exclude_file=exclude_file,
         include_file=include_file,
         rand_seed=rand_seed,
-        upsampling=upsampling
+        upsampling=upsampling,
+        ps_file=ps_file
     )
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=dataset.get_collate_fn())
 
