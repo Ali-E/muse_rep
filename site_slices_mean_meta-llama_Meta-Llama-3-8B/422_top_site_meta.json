@@ -1,0 +1,16 @@
+{
+  "hook_name": "blocks.19.hook_resid_post",
+  "layer": 19,
+  "site": "resid_post",
+  "head": "",
+  "head_idx": null,
+  "positions_clean": [
+    18
+  ],
+  "tensor_shape": [
+    1,
+    1,
+    4096
+  ],
+  "notes": "Clean-run activations at answer-predicting positions for the top-restoring site."
+}

@@ -237,12 +237,23 @@ def save_top_site_activation(
     head_idx  = top_entry["head_idx"]
     act = clean_cache[hook_name]  # [B,S,D] or [B,S,H,d_head]
 
+    # Guard against any out-of-bounds indices in pos_clean (can happen if token
+    # offsets are computed slightly differently than the cached sequence length
+    # for some tokenizer/model combinations).
+    S = act.shape[1]
+    valid_pos_clean = [p for p in pos_clean if 0 <= p < S]
+    if not valid_pos_clean:
+        raise ValueError(
+            f"No valid answer-predicting positions for hook '{hook_name}'; "
+            f"got pos_clean={pos_clean} but sequence length is {S}."
+        )
+
     if head_idx is None:
         # resid/mlp: gather the [S,D] rows at pos_clean
-        act_slice = act[:, pos_clean, :].detach().cpu()
+        act_slice = act[:, valid_pos_clean, :].detach().cpu()
     else:
         # attn result: pick head -> [B,S,d_head], then gather positions
-        act_slice = act[:, :, head_idx, :][:, pos_clean, :].detach().cpu()
+        act_slice = act[:, :, head_idx, :][:, valid_pos_clean, :].detach().cpu()
 
     torch.save(act_slice, out_tensor_path)
     meta = {
