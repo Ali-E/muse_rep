@@ -1,6 +1,7 @@
 from metrics.verbmem import eval as eval_verbmem
 from metrics.privleak import eval as eval_privleak
 from metrics.knowmem import eval as eval_knowmem
+from metrics.knowfacts import eval as eval_knowfacts
 from metrics.fluency import eval as eval_fluency
 from utils import load_model, load_tokenizer, write_csv, read_json, write_json, load_csv, read_text
 from constants import INCREMENTS_LLAMA3, SUPPORTED_METRICS, CORPORA, LLAMA_DIR, DEFAULT_DATA, AUC_RETRAIN
@@ -16,11 +17,14 @@ import json
 import numpy as np
 
 
-def process_forget_file(indices_ratio: str, indices_seed: int = -1, parent_dir: str = None) -> str:
+def process_forget_file(indices_ratio: str, indices_seed: int = -1, parent_dir: str = None, file_name: str | None = None) -> str:
     """
     process the forget file by keeping the subset of indices that is specified by a file defined by `indices_seed`. 
     """
-    indices_file = f"forget_indices_{indices_ratio}_seed_{indices_seed}.csv"
+    if file_name is None:
+        indices_file = f"forget_indices_{indices_ratio}_seed_{indices_seed}.csv"
+    else:
+        indices_file = file_name
     if parent_dir is not None:
         indices_file = os.path.join(parent_dir, indices_file)
 
@@ -40,6 +44,8 @@ def eval_model(
     verbmem_max_new_tokens: int = 128,
     knowmem_agg_key: str = 'mean_rougeL',
     knowmem_max_new_tokens: int = 32,
+    knowfacts_agg_key: str = 'mean_rougeL',
+    knowfacts_max_new_tokens: int = 32,
     fluency_max_samples: int = 1000,
     fluency_max_length: int = 512,
     privleak_use_wikitext: bool = True,
@@ -53,6 +59,8 @@ def eval_model(
     knowmem_forget_qa_icl_file: str | None = None,
     knowmem_retain_qa_file: str | None = None,
     knowmem_retain_qa_icl_file: str | None = None,
+    knowfacts_forget_qa_file: str | None = None,
+    # knowfacts_retain_qa_file: str | None = None,
     temp_dir: str | None = None,
     device: str | None = None,
     forget_file: str | None = None,
@@ -80,11 +88,14 @@ def eval_model(
         knowmem_forget_qa_icl_file = DEFAULT_DATA[corpus]['knowmem_forget_qa_icl_file'] if knowmem_forget_qa_icl_file is None else knowmem_forget_qa_icl_file
         knowmem_retain_qa_file = DEFAULT_DATA[corpus]['knowmem_retain_qa_file'] if knowmem_retain_qa_file is None else knowmem_retain_qa_file
         knowmem_retain_qa_icl_file = DEFAULT_DATA[corpus]['knowmem_retain_qa_icl_file'] if knowmem_retain_qa_icl_file is None else knowmem_retain_qa_icl_file
+        knowfacts_forget_qa_file = DEFAULT_DATA[corpus].get('knowfacts_forget_qa_file') if knowfacts_forget_qa_file is None else knowfacts_forget_qa_file
+        # knowfacts_retain_qa_file = DEFAULT_DATA[corpus].get('knowfacts_retain_qa_file') if knowfacts_retain_qa_file is None else knowfacts_retain_qa_file
 
     if forget_file is not None:
         verbmem_forget_file = forget_file
         privleak_forget_file = forget_file
         knowmem_forget_qa_file = forget_file
+        knowfacts_forget_qa_file = forget_file
 
         if temp_dir is not None:
             temp_dir = os.path.join(temp_dir, forget_file.split('/')[-1].split('.')[0])
@@ -92,7 +103,11 @@ def eval_model(
             os.makedirs(temp_dir, exist_ok=True)
 
     if indices_seed >= 0:
-        including_indices = process_forget_file(including_ratio, indices_seed, parent_dir="data/books/raw/")
+        including_indices = process_forget_file(including_ratio, indices_seed, parent_dir="data/books/raw/", file_name=None)
+        if including_indices is not None:
+            print('Including indices length: ', len(including_indices))
+        else:
+            print('Including indices is None')
 
         if temp_dir is not None:
             # temp_dir = os.path.join(temp_dir, forget_file.split('/')[-1].split('.')[0])
@@ -159,6 +174,7 @@ def eval_model(
                 print(f"Warning: Could not load HICS file: {e}")
         
         # Compute all privleak metrics in a single efficient pass
+        print(f"flag privleak_use_wikitext: {privleak_use_wikitext}")
         auc_all, log_all = eval_privleak(
             forget_data=read_json(privleak_forget_file),
             retain_data=read_json(privleak_retain_file),
@@ -175,36 +191,36 @@ def eval_model(
                 write_json(auc_all['standard'], os.path.join(temp_dir, "privleak/auc.json"))
                 write_json(log_all['standard'], os.path.join(temp_dir, "privleak/log.json"))
             out['privleak'] = auc_all['standard'][privleak_auc_key]
-            # Add HICS AUC if computed
-            if hics_data is not None and 'forget_hics_Min-40%' in auc_all['standard']:
-                out['privleak_hics'] = auc_all['standard']['forget_hics_Min-40%']
-            # Add WikiText AUC if computed
-            if privleak_use_wikitext and 'forget_wikitext_Min-40%' in auc_all['standard']:
-                out['privleak_wikitext'] = auc_all['standard']['forget_wikitext_Min-40%']
+            # Add ALL computed AUC scores with Min-40% to output
+            for key, value in auc_all['standard'].items():
+                if 'Min-40%' in key and key != privleak_auc_key:
+                    # Add with privleak_ prefix
+                    out_key = f"privleak_{key}"
+                    out[out_key] = value
         
         if 'privleak++' in metrics:
             if temp_dir is not None:
                 write_json(auc_all['plusplus'], os.path.join(temp_dir, "privleak++/auc.json"))
                 write_json(log_all['plusplus'], os.path.join(temp_dir, "privleak++/log.json"))
             out['privleak++'] = auc_all['plusplus'][privleak_auc_key]
-            # Add HICS AUC if computed
-            if hics_data is not None and 'forget_hics_Min-40%' in auc_all['plusplus']:
-                out['privleak++_hics'] = auc_all['plusplus']['forget_hics_Min-40%']
-            # Add WikiText AUC if computed
-            if privleak_use_wikitext and 'forget_wikitext_Min-40%' in auc_all['plusplus']:
-                out['privleak++_wikitext'] = auc_all['plusplus']['forget_wikitext_Min-40%']
+            # Add ALL computed AUC scores with Min-40% to output
+            for key, value in auc_all['plusplus'].items():
+                if 'Min-40%' in key and key != privleak_auc_key:
+                    # Add with privleak++_ prefix
+                    out_key = f"privleak++_{key}"
+                    out[out_key] = value
         
         if 'privleak_zlib' in metrics:
             if temp_dir is not None:
                 write_json(auc_all['zlib'], os.path.join(temp_dir, "privleak_zlib/auc.json"))
                 write_json(log_all['zlib'], os.path.join(temp_dir, "privleak_zlib/log.json"))
             out['privleak_zlib'] = auc_all['zlib'][privleak_auc_key]
-            # Add HICS AUC if computed
-            if hics_data is not None and 'forget_hics_Min-40%' in auc_all['zlib']:
-                out['privleak_zlib_hics'] = auc_all['zlib']['forget_hics_Min-40%']
-            # Add WikiText AUC if computed
-            if privleak_use_wikitext and 'forget_wikitext_Min-40%' in auc_all['zlib']:
-                out['privleak_zlib_wikitext'] = auc_all['zlib']['forget_wikitext_Min-40%']
+            # Add ALL computed AUC scores with Min-40% to output
+            for key, value in auc_all['zlib'].items():
+                if 'Min-40%' in key and key != privleak_auc_key:
+                    # Add with privleak_zlib_ prefix
+                    out_key = f"privleak_zlib_{key}"
+                    out[out_key] = value
 
     # 3. knowmem_f
     if 'knowmem_f' in metrics:
@@ -266,6 +282,51 @@ def eval_model(
             # write_json(log, os.path.join(temp_dir, "knowmem_r/log.json"))
             log.to_csv(os.path.join(temp_dir, "knowmem_r/log.json"), index=False)
         out['knowmem_r'] = agg[knowmem_agg_key] * 100
+
+    # 4.5. knowfacts_f (fill-in-the-blank facts)
+    if 'knowfacts_f' in metrics:
+        if knowfacts_forget_qa_file is None:
+            print("Warning: knowfacts_forget_qa_file not provided, skipping knowfacts_f")
+        else:
+            # Load questions/answers
+            if knowfacts_forget_qa_file.endswith('.csv'):
+                data = load_csv(knowfacts_forget_qa_file, including_indices=including_indices)
+                print('len eval data: ', len(data))
+                questions = data['question'].tolist()# [:20]
+                answers = data['answer'].tolist()# [:20]
+            else:
+                qa = read_json(knowfacts_forget_qa_file)
+                questions = [d['question'] for d in qa]
+                answers = [d['answer'] for d in qa]
+
+            # Use simple_facts from find_matching_facts.py as ICL examples
+            simple_facts = {
+                'Capital of France is _____.': 'Paris',
+                'The Eifel tower is in _____.': 'Paris',
+                'The capital of Italy is _____.': 'Rome',
+                '____ is the capital of Germany.': 'Berlin',
+                'The name of the author of Harry Potter is _____.': 'J.K. Rowling',
+                'The name of the author of the Fourth Wing is _____.': 'Rebecca Yarros',
+                'The largest planet in our solar system is _____.': 'Jupiter',
+                '___ is the only star in our solar system.': 'The Sun'
+            }
+            icl_qs = list(simple_facts.keys())
+            icl_as = list(simple_facts.values())
+
+            agg, log = eval_knowfacts(
+                questions=questions,
+                answers=answers,
+                icl_qs=icl_qs,
+                icl_as=icl_as,
+                model=model, tokenizer=tokenizer,
+                max_new_tokens=knowfacts_max_new_tokens
+            )
+
+            if temp_dir is not None:
+                write_json(agg, os.path.join(temp_dir, "knowfacts_f/agg.json"))
+                log.to_csv(os.path.join(temp_dir, "knowfacts_f/log.csv"))
+            out['knowfacts_f'] = agg[knowfacts_agg_key] * 100
+
 
     # 5. Fluency metrics (WikiText)
     if 'fluency_wikitext' in metrics:
@@ -358,8 +419,8 @@ def load_then_eval_models(
                 model_dirs = ['EleutherAI/pythia-2.8b']  
             elif names[0] == 'base':
                 # model_dirs = ['muse-bench/MUSE-Books_target', 'meta-llama/Llama-2-7b-hf']
-                # model_dirs = ['meta-llama/Meta-Llama-3-8B', 'muse-bench/MUSE-Books_target', 'meta-llama/Llama-2-7b-hf']
-                model_dirs = ['muse-bench/MUSE-books_retrain']
+                model_dirs = ['meta-llama/Meta-Llama-3-8B', 'muse-bench/MUSE-Books_target', 'meta-llama/Llama-2-7b-hf', 'muse-bench/MUSE-books_retrain']
+                # model_dirs = ['muse-bench/MUSE-books_retrain']
                 names = model_dirs
     if out_file is not None and not out_file.endswith('.csv'):
         raise ValueError(f"The file extension of `out_file` should be '.csv'.")
@@ -377,19 +438,56 @@ def load_then_eval_models(
             tokenizer_dir_cur = tokenizer_dir
 
         if epoch != 0:
-            if epoch < 0:
+            if epoch == -1:
+                # Auto-detect all checkpoints in the model directory
+                import glob
+                checkpoint_dirs = glob.glob(os.path.join(model_dir, "checkpoint-*"))
+                if checkpoint_dirs:
+                    # Extract the checkpoint numbers from directory names
+                    epochs_inc = []
+                    for ckpt_dir in checkpoint_dirs:
+                        ckpt_name = os.path.basename(ckpt_dir)
+                        if ckpt_name.startswith("checkpoint-"):
+                            try:
+                                ckpt_num = int(ckpt_name.split("-")[1])
+                                epochs_inc.append(ckpt_num)
+                            except (ValueError, IndexError):
+                                continue
+                    epochs_inc = sorted(epochs_inc)
+                    
+                    # Convert checkpoint numbers back to epoch numbers
+                    # portion = name.split('_')[-1]
+                    # increments = 1
+                    # if LLAMA_DIR == 'meta-llama/Meta-Llama-3-8B':
+                    #     increments = INCREMENTS_LLAMA3[corpus].get(portion, 1)
+                    
+                    # epochs = [ckpt_num // increments if increments > 0 else ckpt_num for ckpt_num in epochs_inc]
+                    epochs = list(range(1, len(epochs_inc) + 1))
+                    print(f'Auto-detected checkpoints: {epochs_inc}')
+                    print(f'Corresponding epochs: {epochs}')
+                else:
+                    print(f"Warning: No checkpoints found in {model_dir}, using epoch 0")
+                    epochs = [0]
+                    epochs_inc = [0]
+            elif epoch < -1:
                 epochs = list(range(1, -epoch + 1))
+                portion = name.split('_')[-1]
+                increments = 1
+                if LLAMA_DIR == 'meta-llama/Meta-Llama-3-8B':
+                    increments = INCREMENTS_LLAMA3[corpus].get(portion, 1)
+                epochs_inc = [ep * increments for ep in epochs]
+                print('epochs_inc: ', epochs_inc)
             else:
                 epochs = [epoch]
-
-            portion = name.split('_')[-1]
-            increments = 1
-            if LLAMA_DIR == 'meta-llama/Meta-Llama-3-8B':
-                increments = INCREMENTS_LLAMA3[corpus][portion]
-            epochs_inc = [ep * increments for ep in epochs]
-            print('epochs_inc: ', epochs_inc)
+                portion = name.split('_')[-1]
+                increments = 1
+                if LLAMA_DIR == 'meta-llama/Meta-Llama-3-8B':
+                    increments = INCREMENTS_LLAMA3[corpus].get(portion, 1)
+                epochs_inc = [ep * increments for ep in epochs]
+                print('epochs_inc: ', epochs_inc)
         else:
             epochs = [0]
+            epochs_inc = [0]
 
 
         print('epochs: ', epochs)
@@ -461,7 +559,7 @@ if __name__ == '__main__':
     parser.add_argument('--forget_files', type=str, nargs='+', default=None, help="List of files to use for forgetting.")
     parser.add_argument('--including_ratios', type=str, nargs='+', default=None, help="List of ratios to include in the evaluation.")
     parser.add_argument('--indices_seed', type=int, default=-1, help="Seed for selecting indices from the forget file. If -1, no specific indices are selected.")
-    parser.add_argument('--epoch', type=int, default=0, help="Epoch number for evaluation. Negative sign means range of values for that value.")
+    parser.add_argument('--epoch', type=int, default=0, help="Epoch number for evaluation. -1 = auto-detect all checkpoints, -N (N>1) = range 1 to N, 0 = base model, N>0 = specific epoch.")
     parser.add_argument('--privleak_use_wikitext', action='store_true', help="Use WikiText as additional holdout data for privleak evaluation.")
     parser.add_argument('--privleak_wikitext_samples', type=int, default=500, help="Number of WikiText samples to use for privleak (default: 1000).")
 

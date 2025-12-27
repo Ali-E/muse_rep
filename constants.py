@@ -1,4 +1,4 @@
-SUPPORTED_METRICS = ['verbmem_f', 'privleak', 'knowmem_f', 'knowmem_r', 'privleak++', 'privleak_zlib', 'fluency_wikitext', 'fluency_c4', 'fluency_lambada', 'fluency_hellaswag']
+SUPPORTED_METRICS = ['verbmem_f', 'privleak', 'knowmem_f', 'knowmem_r', 'knowfacts_f', 'privleak++', 'privleak_zlib', 'fluency_wikitext', 'fluency_c4', 'fluency_lambada', 'fluency_hellaswag']
 
 CORPORA = ['news', 'books']
 
@@ -20,6 +20,7 @@ DEFAULT_DATA = {
         'knowmem_retain_qa_icl_file': "data/news/knowmem/retain_qa_icl.json",
     },
     'books': {
+        'forget_file': "data/books/raw/forget_chunks.txt",
         # 'verbmem_forget_file': "data/books/verbmem/forget.json",
         'verbmem_forget_file': "data/books/verbmem/verbatim_all_rows.csv",
         'privleak_forget_file': "data/books/privleak/forget.json",
@@ -33,6 +34,8 @@ DEFAULT_DATA = {
         'knowmem_forget_qa_icl_file': "data/books/knowmem/forget_qa_icl.json",
         'knowmem_retain_qa_file': "data/books/knowmem/retain_qa.json",
         'knowmem_retain_qa_icl_file': "data/books/knowmem/retain_qa_icl.json",
+        'knowfacts_forget_qa_file': "data/books/matching_facts_combined.csv",
+        # 'knowfacts_retain_qa_file': None,  # Optional: can be added later if needed
     }
 }
 

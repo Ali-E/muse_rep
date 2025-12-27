@@ -26,6 +26,26 @@ else:
 
 def main():
     args = get_args()
+    
+    # Auto-calculate upsampling ratio if requested
+    if args.auto_upsample and args.forget_portion < 1.0:
+        # Upsample to match the total forget set size
+        args.upsample = 1.0 / args.forget_portion
+        print(f"Auto-upsampling enabled: portion={args.forget_portion}, upsampling ratio={args.upsample:.2f}")
+    
+    # Set SimNPO hyperparameters for Books dataset according to the paper
+    if 'simnpo' in args.algo:
+        print("Using SimNPO hyperparameters for Books dataset from the paper:")
+        args.beta = 0.5
+        # args.gamma = 1.0
+        args.epochs = 5
+        print(f"  beta={args.beta}, gamma={args.gamma}, lr={args.lr}, epochs={args.epochs}")
+    
+    elif 'rmu' in args.algo:
+        print("Using RMU hyperparameters for Books dataset from the paper:")
+        args.epochs = 1
+        args.lr = 0.0001 # e-4
+        print(f"  lr={args.lr}, epochs={args.epochs}")
 
     if args.algo == 'kn':
         raise NotImplementedError()
@@ -44,7 +64,8 @@ def main():
             include_file=args.match_file,
             index_file=args.index_file,
             rand_seed=args.seed,
-            upsampling=args.upsample
+            upsampling=args.upsample,
+            ps_file=args.ps_file
         )
         tv_unlearn(
             args.model_dir, args.out_dir,
@@ -68,6 +89,7 @@ def main():
             rand_seed=args.seed,
             upsampling=args.upsample,
             alpha=args.alpha,
+            ps_file=args.ps_file
         )
 
     else:
@@ -93,7 +115,8 @@ def main():
             include_file=args.match_file,
             index_file=args.index_file,
             rand_seed=args.seed,
-            upsampling=args.upsample
+            upsampling=args.upsample,
+            ps_file=args.ps_file
         )
 
     return;
@@ -133,7 +156,7 @@ def get_args():
     )
 
     parser.add_argument(
-        '--match_file', type=str, default='~/muse_data/matching_qa_pairs_combined.csv',
+        '--match_file', type=str, default=None, # default='~/muse_data/matching_qa_pairs_combined.csv',
         help="Path to the matching file to exclude/include their indices when portion < 1.0"
     )
 
@@ -150,6 +173,16 @@ def get_args():
     parser.add_argument(
         '--upsample', type=float, default=1.0,
         help="Upsampling ratio for the forget set."
+    )
+
+    parser.add_argument(
+        '--auto_upsample', action='store_true',
+        help="If set, automatically upsample the forget set when portion < 1.0 to match the total forget set size. Overrides --upsample."
+    )
+
+    parser.add_argument(
+        '--ps_file', type=str, default=None,
+        help="Path to PS scores CSV file (with sample_id and ps columns). When provided and portion < 1.0, samples are selected by descending PS scores instead of randomly."
     )
 
     # Gradient ascent & Gradient difference

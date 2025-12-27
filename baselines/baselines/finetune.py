@@ -17,7 +17,8 @@ def finetune(
     exclude_file: str | None = None,
     include_file: str | None = None,
     rand_seed: int = 1,
-    upsampling: float = 1.0
+    upsampling: float = 1.0,
+    ps_file: str | None = None
 ):
     model, tokenizer = load_model_and_tokenizer(
         model_dir,
@@ -32,7 +33,8 @@ def finetune(
         exclude_file=exclude_file,
         include_file=include_file,
         rand_seed=rand_seed,
-        upsampling=upsampling
+        upsampling=upsampling,
+        ps_file=ps_file
     )
 
     training_args = transformers.TrainingArguments(

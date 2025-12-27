@@ -203,9 +203,12 @@ def eval(
         
         # Add WikiText if requested (filter by length to match forget data)
         if use_wikitext:
-            wikitext_data = load_wikitext_data(split='test', max_samples=wikitext_max_samples, min_length=5000, max_length=10000)
+            wikitext_data = load_wikitext_data(split='test', max_samples=wikitext_max_samples, min_length=200, max_length=12000)
             if wikitext_data:
+                print(f"Loaded {len(wikitext_data)} WikiText samples for privleak evaluation.")
                 datasets.append(('wikitext', wikitext_data))
+            else:
+                print("Warning: WikiText data could not be loaded or is empty.")
         
         print("Evaluating all privleak variants efficiently...")
         for split_name, data in datasets:
@@ -235,6 +238,8 @@ def eval(
                 compare_splits.append('wikitext')
             
             comparison_pairs = [('forget', split1) for split1 in compare_splits] + [('holdout', 'hics'), ('retain', 'hics')]
+            if use_wikitext:
+                comparison_pairs += [('holdout', 'wikitext'), ('hics', 'wikitext')]
             for split0, split1 in comparison_pairs:
                 if split0 not in log or split1 not in log:
                     continue

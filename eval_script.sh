@@ -1,8 +1,10 @@
 CORPUS="books"
 # algo="npo"
-# algo="npo_gdr"
-algo="rmu"
+algo="npo_gdr"
+# algo="npo_klr"
+algo_name="npo_gdr_PS_llama3"
 res_types=("knowmem_r" "knowmem_f" "privleak" "privleak++" "privleak_zlib" "fluency_wikitext" "fluency_c4" "fluency_lambada" "fluency_hellaswag" )
+# res_types=("knowfacts_f")
 # res_types=("privleak" "privleak++" "privleak_zlib" )
 # res_types=("knowmem_r" "knowmem_f" "privleak" "privleak++" "privleak_zlib" )
 # res_types=("knowmem_f")
@@ -27,30 +29,55 @@ indices_seed=1
 #                              "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_0.5_s1/" \
 #     --names "${algo}_0.05" "${algo}_0.1" "${algo}_0.25" "${algo}_0.5" \
 #     --corpus "${CORPUS}" \
-#     --epoch 0 \
+#     --epoch -1 \
 #     --indices_seed ${indices_seed} \
 #     --out_file "${CORPUS}_knowmem_f_some_${algo}.csv" \
+#     --metrics "${res_types[@]}" \
+#     --privleak_use_wikitext
+
+# python eval.py \
+#     --model_dirs "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_0.75_s1/" \
+#                              "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_1.0/" \
+#     --names "${algo}_0.75" "${algo}_1.0" \
+#     --corpus "${CORPUS}" \
+#     --epoch -1 \
+#     --indices_seed ${indices_seed} \
+#     --out_file "${CORPUS}_knowmem_f_rest_${algo}.csv" \
 #     --metrics "${res_types[@]}" 
 
 python eval.py \
-    --model_dirs "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_0.05_s1/Epoch_1" \
-                             "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_0.1_s1/Epoch_1" \
-                             "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_0.25_s1/Epoch_1" \
-                             "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_0.5_s1/Epoch_1" \
-    --names "${algo}_0.05" "${algo}_0.1" "${algo}_0.25" "${algo}_0.5" \
+    --model_dirs "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_0.05_PS/" \
+                             "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_0.1_PS/" \
+                             "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_0.25_PS/" \
+                             "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_0.5_PS/" \
+                             "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_1.0_PS/" \
+    --names "${algo_name}_0.05" "${algo_name}_0.1" "${algo_name}_0.25" "${algo_name}_0.5" "${algo_name}_1.0" \
     --corpus "${CORPUS}" \
     --epoch 0 \
     --indices_seed ${indices_seed} \
-    --out_file "${CORPUS}_knowmem_f_some_${algo}.csv" \
-    --metrics "${res_types[@]}" 
+    --out_file "${CORPUS}_knowmem_f_${algo_name}.csv" \
+    --metrics "${res_types[@]}" \
+    --privleak_use_wikitext
+
+# python eval.py \
+#     --model_dirs "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_0.05_s1/Epoch_1" \
+#                              "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_0.1_s1/Epoch_1" \
+#                              "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_0.25_s1/Epoch_1" \
+#                              "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_0.5_s1/Epoch_1" \
+#     --names "${algo_name}_0.05" "${algo_name}_0.1" "${algo_name}_0.25" "${algo_name}_0.5" \
+#     --corpus "${CORPUS}" \
+#     --epoch -1 \
+#     --indices_seed ${indices_seed} \
+#     --out_file "${CORPUS}_knowmem_f_some_${algo_name}.csv" \
+#     --metrics "${res_types[@]}" 
 
 # python eval.py \
 #     --names "base" \
 #     --corpus "${CORPUS}" \
 #     --indices_seed ${indices_seed} \
-#     --out_file "${CORPUS}_knowmem_f_base.csv" \
+#     --out_file "${CORPUS}_knowfacts_f_base_redo.csv" \
 #     --metrics "${res_types[@]}" \
-#     --privleak_use_wikitext
+    ## --privleak_use_wikitext
 
 
 # python eval.py \
