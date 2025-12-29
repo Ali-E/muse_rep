@@ -39,7 +39,7 @@ def eval_model(
     tokenizer: LlamaTokenizer = LLAMA_DIR,
     metrics: List[str] = SUPPORTED_METRICS,
     corpus: Literal['news', 'books'] | None = None,
-    privleak_auc_key: str = 'forget_holdout_Min-40%',
+    privleak_auc_key: str = 'holdout_forget_Min-40%',
     verbmem_agg_key: str = 'mean_rougeL',
     verbmem_max_new_tokens: int = 128,
     knowmem_agg_key: str = 'mean_rougeL',
@@ -50,6 +50,8 @@ def eval_model(
     fluency_max_length: int = 512,
     privleak_use_wikitext: bool = True,
     privleak_wikitext_samples: int = 1000,
+    privleak_truncate_same_length: bool = False,
+    privleak_max_length: int | None = None,
     verbmem_forget_file: str | None = None,
     privleak_forget_file: str | None = None,
     privleak_retain_file: str | None = None,
@@ -183,7 +185,9 @@ def eval_model(
             compute_all_variants=True,
             use_wikitext=privleak_use_wikitext,
             wikitext_max_samples=privleak_wikitext_samples,
-            hics_data=hics_data
+            hics_data=hics_data,
+            truncate_to_same_length=args_dict.get('privleak_truncate_same_length', False),
+            max_length=args_dict.get('privleak_max_length', None)
         )
         
         if 'privleak' in metrics:
@@ -404,6 +408,8 @@ def load_then_eval_models(
     epoch : int = 0,
     privleak_use_wikitext: bool = False,
     privleak_wikitext_samples: int = 500,
+    privleak_truncate_same_length: bool = False,
+    privleak_max_length: int | None = None,
 ) -> DataFrame:
     # Argument sanity check
     # if not model_dirs:
@@ -521,7 +527,9 @@ def load_then_eval_models(
                         including_ratio=including_ratio,
                         indices_seed=indices_seed,
                         privleak_use_wikitext=privleak_use_wikitext,
-                        privleak_wikitext_samples=privleak_wikitext_samples
+                        privleak_wikitext_samples=privleak_wikitext_samples,
+                        privleak_truncate_same_length=privleak_truncate_same_length,
+                        privleak_max_length=privleak_max_length
                     )
 
                     current_name = name
@@ -562,6 +570,8 @@ if __name__ == '__main__':
     parser.add_argument('--epoch', type=int, default=0, help="Epoch number for evaluation. -1 = auto-detect all checkpoints, -N (N>1) = range 1 to N, 0 = base model, N>0 = specific epoch.")
     parser.add_argument('--privleak_use_wikitext', action='store_true', help="Use WikiText as additional holdout data for privleak evaluation.")
     parser.add_argument('--privleak_wikitext_samples', type=int, default=500, help="Number of WikiText samples to use for privleak (default: 1000).")
+    parser.add_argument('--privleak_truncate_same_length', action='store_true', help="Truncate all texts to the same token length for fair comparison.")
+    parser.add_argument('--privleak_max_length', type=int, default=None, help="Maximum token length for privleak truncation. If None, uses minimum length across datasets.")
 
     args = parser.parse_args()
     args_dict = vars(args)

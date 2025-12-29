@@ -77,7 +77,7 @@ def main():
     elif args.algo == 'rmu':
         rmu_unlearn(
             args.model_dir, args.data_file, args.out_dir,
-            retain_data_file=args.retain_data_file,
+            retain_data_file=args.retain_data_file if not args.use_wikitext else None,
             batch_size=args.per_device_batch_size,
             epochs=args.epochs,
             learning_rate=args.lr,
@@ -89,13 +89,15 @@ def main():
             rand_seed=args.seed,
             upsampling=args.upsample,
             alpha=args.alpha,
-            ps_file=args.ps_file
+            ps_file=args.ps_file,
+            use_wikitext=args.use_wikitext,
+            wikitext_max_samples=args.wikitext_max_samples
         )
 
     else:
         it_unlearn(
             args.model_dir, args.data_file, args.out_dir,
-            retain_data_file=args.retain_data_file,
+            retain_data_file=args.retain_data_file if not args.use_wikitext else None,
             loss_type=args.algo,
             per_device_batch_size=args.per_device_batch_size,
             epochs=args.epochs,
@@ -116,7 +118,9 @@ def main():
             index_file=args.index_file,
             rand_seed=args.seed,
             upsampling=args.upsample,
-            ps_file=args.ps_file
+            ps_file=args.ps_file,
+            use_wikitext=args.use_wikitext,
+            wikitext_max_samples=args.wikitext_max_samples
         )
 
     return;
@@ -190,6 +194,14 @@ def get_args():
     parser.add_argument(
         '--retain_data_file', type=str, default='../data/books/raw/retain1.txt',
         help="Path to the retain set file. Required if algo is gradient difference (gd)."
+    )
+    parser.add_argument(
+        '--use_wikitext', action='store_true',
+        help="Use WikiText-2 as retain/regularization data instead of retain_data_file."
+    )
+    parser.add_argument(
+        '--wikitext_max_samples', type=int, default=None,
+        help="Maximum number of WikiText samples to use (default: use all available)."
     )
     parser.add_argument(
         '--lr', type=float, default=1e-5,

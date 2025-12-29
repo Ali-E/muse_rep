@@ -65,7 +65,7 @@ for idx in range(len(plot_columns), len(axes)):
 
 plt.tight_layout()
 plt.savefig('comparison_plot_all_metrics.png', dpi=300, bbox_inches='tight')
-print(f"Saved plot with {len(plot_columns)} metrics to 'comparison_plot_all_metrics.png'")
+print(f"Saved plot with {len(plot_columns)} metrics to 'comparison_plot_all_metrics_randonly.png'")
 
 # Create a second figure with key metrics only
 key_metrics = ['knowmem_f', 'fluency_lambada_acc']
@@ -96,7 +96,7 @@ if key_metrics:
         y_PS_with_baseline = np.concatenate([[baseline_values[col]], y_PS])
         
         ax.plot(x_R_with_baseline, y_R_with_baseline, marker='o', linewidth=2.5, markersize=10, label='Random (R)', color='#2E86AB')
-        ax.plot(x_PS_with_baseline, y_PS_with_baseline, marker='s', linewidth=2.5, markersize=10, label='PS-based', color='#A23B72')
+        # ax.plot(x_PS_with_baseline, y_PS_with_baseline, marker='s', linewidth=2.5, markersize=10, label='PS-based', color='#A23B72')
         
         ax.set_xlabel('Including Ratio', fontsize=12, fontweight='bold')
         ax.set_ylabel(col.replace('_', ' ').title(), fontsize=12, fontweight='bold')

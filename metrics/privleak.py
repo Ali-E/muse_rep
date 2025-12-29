@@ -159,7 +159,9 @@ def eval(
     compute_all_variants: bool = False,
     use_wikitext: bool = False,
     wikitext_max_samples: Optional[int] = None,
-    hics_data: Optional[List[str]] = None
+    hics_data: Optional[List[str]] = None,
+    truncate_to_same_length: bool = False,
+    max_length: Optional[int] = None
 ):
     """
     Evaluate privacy leakage metrics.
@@ -176,6 +178,8 @@ def eval(
         use_wikitext: Add WikiText as additional holdout dataset
         wikitext_max_samples: Max WikiText samples to use
         hics_data: Optional HICS data as additional holdout
+        truncate_to_same_length: If True, truncate all texts to the same token length
+        max_length: Maximum token length to truncate to. If None, uses the minimum length across all datasets
     
     Returns:
         If compute_all_variants=True:
@@ -189,6 +193,42 @@ def eval(
         # Efficient computation of all three variants
         log_all = {'standard': {}, 'plusplus': {}, 'zlib': {}}
         auc_all = {'standard': {}, 'plusplus': {}, 'zlib': {}}
+        
+        # Truncate texts to same length if requested
+        if truncate_to_same_length:
+            all_data = [forget_data, retain_data, holdout_data]
+            if hics_data is not None:
+                all_data.append(hics_data)
+            
+            # Compute token lengths for all texts
+            def get_token_length(text):
+                return len(tokenizer.encode(text, add_special_tokens=False))
+            
+            # Find the target length (minimum across all datasets or user-specified)
+            if max_length is None:
+                all_lengths = []
+                for data in all_data:
+                    all_lengths.extend([get_token_length(text) for text in data])
+                target_length = min(all_lengths)
+                print(f"Truncating all texts to {target_length} tokens (minimum found across datasets)")
+            else:
+                target_length = max_length
+                print(f"Truncating all texts to {target_length} tokens (user-specified)")
+            
+            # Truncate all texts
+            def truncate_text(text, target_len):
+                tokens = tokenizer.encode(text, add_special_tokens=False)
+                if len(tokens) > target_len:
+                    tokens = tokens[:target_len]
+                return tokenizer.decode(tokens, skip_special_tokens=True)
+            
+            forget_data = [truncate_text(text, target_length) for text in forget_data]
+            retain_data = [truncate_text(text, target_length) for text in retain_data]
+            holdout_data = [truncate_text(text, target_length) for text in holdout_data]
+            if hics_data is not None:
+                hics_data = [truncate_text(text, target_length) for text in hics_data]
+            
+            print(f"Truncated all datasets to {target_length} tokens per sample")
         
         # Prepare all datasets
         datasets = [
@@ -247,16 +287,56 @@ def eval(
                 for ppl_type in ppl_types:
                     ppl_nonmember = [d[ppl_type] for d in log0]
                     ppl_member = [d[ppl_type] for d in log1]
+                    
+                    # Balance the dataset sizes to ensure AUC baseline is 0.5
+                    min_size = min(len(ppl_nonmember), len(ppl_member))
+                    ppl_nonmember = ppl_nonmember[:min_size]
+                    ppl_member = ppl_member[:min_size]
+                    
                     ppl = np.array(ppl_nonmember + ppl_member)
                     y = np.array([0] * len(ppl_nonmember) + [1] * len(ppl_member))
                     _, _, auc_score, _ = sweep(ppl, y)
-                    auc[f"{split0}_{split1}_{ppl_type}"] = auc_score
+                    # Key format: positive_negative (member_nonmember)
+                    auc[f"{split1}_{split0}_{ppl_type}"] = auc_score
             auc_all[variant] = auc
         
         return auc_all, log_all
     
     else:
         # Original single-variant computation
+        
+        # Truncate texts to same length if requested
+        if truncate_to_same_length:
+            all_data = [forget_data, retain_data, holdout_data]
+            
+            # Compute token lengths for all texts
+            def get_token_length(text):
+                return len(tokenizer.encode(text, add_special_tokens=False))
+            
+            # Find the target length (minimum across all datasets or user-specified)
+            if max_length is None:
+                all_lengths = []
+                for data in all_data:
+                    all_lengths.extend([get_token_length(text) for text in data])
+                target_length = min(all_lengths)
+                print(f"Truncating all texts to {target_length} tokens (minimum found across datasets)")
+            else:
+                target_length = max_length
+                print(f"Truncating all texts to {target_length} tokens (user-specified)")
+            
+            # Truncate all texts
+            def truncate_text(text, target_len):
+                tokens = tokenizer.encode(text, add_special_tokens=False)
+                if len(tokens) > target_len:
+                    tokens = tokens[:target_len]
+                return tokenizer.decode(tokens, skip_special_tokens=True)
+            
+            forget_data = [truncate_text(text, target_length) for text in forget_data]
+            retain_data = [truncate_text(text, target_length) for text in retain_data]
+            holdout_data = [truncate_text(text, target_length) for text in holdout_data]
+            
+            print(f"Truncated all datasets to {target_length} tokens per sample")
+        
         log = {}
         print("Evaluating on the forget set...")
         log['forget'] = eval_data(forget_data, model, tokenizer, plus_plus=plus_plus, zlib_ratio=zlib_ratio)
@@ -274,9 +354,16 @@ def eval(
                 for ppl_type in ppl_types:
                     ppl_nonmember = [d[ppl_type] for d in log0]
                     ppl_member = [d[ppl_type] for d in log1]
+                    
+                    # Balance the dataset sizes to ensure AUC baseline is 0.5
+                    min_size = min(len(ppl_nonmember), len(ppl_member))
+                    ppl_nonmember = ppl_nonmember[:min_size]
+                    ppl_member = ppl_member[:min_size]
+                    
                     ppl = np.array(ppl_nonmember + ppl_member)
                     y = np.array([0] * len(ppl_nonmember) + [1] * len(ppl_member))
                     _, _, auc_score, _ = sweep(ppl, y)
-                    auc[f"{split0}_{split1}_{ppl_type}"] = auc_score
+                    # Key format: positive_negative (member_nonmember)
+                    auc[f"{split1}_{split0}_{ppl_type}"] = auc_score
 
         return auc, log

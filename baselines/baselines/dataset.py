@@ -1,5 +1,5 @@
 from .utils import read_text, pad_or_trim_tensor
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from pathlib import Path
 import json
 import torch
@@ -11,6 +11,56 @@ import random
 import numpy as np
 from os.path import basename, dirname, join as pathjoin
 import pandas as pd
+
+
+def load_wikitext_as_chunks(
+    tokenizer: AutoTokenizer,
+    max_len: int = 4096,
+    max_samples: Optional[int] = None,
+    split: str = 'train'
+) -> List[str]:
+    """
+    Load WikiText-2 data and return as text chunks suitable for retain/regularization.
+    
+    Args:
+        tokenizer: Tokenizer to use
+        max_len: Maximum token length per chunk
+        max_samples: Maximum number of samples to return (if None, use all)
+        split: Which split to use ('train', 'test', 'validation')
+    
+    Returns:
+        List of text strings
+    """
+    try:
+        from datasets import load_dataset
+        print(f"Loading WikiText-2 ({split} split) as retain data...")
+        dataset = load_dataset('wikitext', 'wikitext-2-raw-v1', split=split)
+        
+        # Concatenate all non-empty texts
+        all_text = ' '.join([item['text'] for item in dataset if item['text'].strip()])
+        
+        # Tokenize the entire text
+        tokens = tokenizer.encode(all_text, add_special_tokens=False)
+        
+        # Split into chunks of max_len
+        chunks = []
+        for i in range(0, len(tokens), max_len):
+            chunk_tokens = tokens[i:i + max_len]
+            if len(chunk_tokens) > 0:  # Skip empty chunks
+                chunk_text = tokenizer.decode(chunk_tokens, skip_special_tokens=True)
+                chunks.append(chunk_text)
+                if max_samples is not None and len(chunks) >= max_samples:
+                    break
+        
+        print(f"Loaded {len(chunks)} WikiText-2 chunks (max_len={max_len} tokens each)")
+        return chunks
+    
+    except ImportError:
+        print("Warning: datasets library not available. Cannot load WikiText.")
+        return []
+    except Exception as e:
+        print(f"Warning: Failed to load WikiText-2: {e}")
+        return []
 
 
 def chunk_tokens(tokens, chunk_size):
@@ -378,19 +428,54 @@ class ForgetRetainDataset(DefaultDataset):
         rand_seed: int = 1,
         upsampling: float = 1.0,
         index_file: str | None = None,
-        ps_file: str | None = None
+        ps_file: str | None = None,
+        use_wikitext: bool = False,
+        wikitext_max_samples: Optional[int] = None
     ):
         self.forget_dataset = DefaultDataset(
             forget_file_path, tokenizer,
             max_len=max_len, add_bos_token=add_bos_token, portion=portion, exclude_file=exclude_file, include_file=include_file, rand_seed=rand_seed, upsampling=upsampling, ps_file=ps_file # forget_subset_indices=forget_subset_indices
         )
 
-        self.retain_exists = retain_file_path is not None
-        if self.retain_exists:
+        # Load retain data: either from file or WikiText
+        if use_wikitext:
+            print("Using WikiText-2 as retain/regularization data")
+            wikitext_chunks = load_wikitext_as_chunks(
+                tokenizer=tokenizer,
+                max_len=max_len,
+                max_samples=wikitext_max_samples,
+                split='train'
+            )
+            if wikitext_chunks:
+                # Create a temporary file-like structure for WikiText
+                self.retain_dataset = DefaultDataset.__new__(DefaultDataset)
+                self.retain_dataset.input_ids = []
+                for chunk_text in wikitext_chunks:
+                    encoding: torch.Tensor = tokenizer(
+                        chunk_text,
+                        add_special_tokens=add_bos_token,
+                        return_tensors='pt'
+                    ).input_ids[0]
+                    encoding = pad_or_trim_tensor(
+                        encoding,
+                        target_length=max_len,
+                        padding_value=tokenizer.pad_token_id
+                    )
+                    self.retain_dataset.input_ids.append(encoding)
+                self.retain_dataset.strings = wikitext_chunks
+                self.retain_exists = True
+                print(f"Loaded {len(self.retain_dataset.input_ids)} WikiText chunks as retain data")
+            else:
+                print("Warning: WikiText loading failed, no retain data will be used")
+                self.retain_exists = False
+        elif retain_file_path is not None:
+            self.retain_exists = True
             self.retain_dataset = DefaultDataset(
                 retain_file_path, tokenizer,
                 max_len=max_len, add_bos_token=add_bos_token, retain_flag=True
             )
+        else:
+            self.retain_exists = False
 
         self.tokenizer = tokenizer
 

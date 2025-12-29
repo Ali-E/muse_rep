@@ -32,9 +32,15 @@ def unlearn(
     npo_coeff: float = 1.0,
     coeff: float = 1.0,
     ps_file: str | None = None,
+    use_wikitext: bool = False,
+    wikitext_max_samples: int | None = None,
 ):
     if 'gd' in loss_type:
         assert retain_data_file is not None, "Retain data must be specified for grad_diff."
+
+    if 'simnpo' in loss_type:
+        gamma = 0.1
+        beta = 1.0
 
     model, tokenizer = load_model_and_tokenizer(
         model_dir,
@@ -71,7 +77,9 @@ def unlearn(
         include_file=include_file,
         rand_seed=rand_seed,
         upsampling=upsampling,
-        ps_file=ps_file
+        ps_file=ps_file,
+        use_wikitext=use_wikitext,
+        wikitext_max_samples=wikitext_max_samples
     )
 
     if device_count() == 0:
@@ -171,7 +179,7 @@ class IterativeUnlearner(Trainer):
         )
         loss_f = outputs_f.loss
 
-        if 'gdr' in self.loss_type or 'klr' in self.loss_type:
+        if 'gdr' in self.loss_type or 'klr' in self.loss_type or 'simnpo' in self.loss_type:
             outputs_r = model(
                 x_r['input_ids'],
                 labels=x_r['labels'] if 'labels' in x_r else x_r['input_ids'].clone(),

@@ -67,6 +67,8 @@ def unlearn(
     alpha=1200,
     module_str="{model_name}.model.layers[{layer_id}]",
     ps_file: str | None = None,
+    use_wikitext: bool = False,
+    wikitext_max_samples: int | None = None,
 ):
 
     updated_model, tokenizer = load_model_and_tokenizer(
@@ -89,7 +91,9 @@ def unlearn(
         include_file=include_file,
         rand_seed=rand_seed,
         upsampling=upsampling,
-        ps_file=ps_file
+        ps_file=ps_file,
+        use_wikitext=use_wikitext,
+        wikitext_max_samples=wikitext_max_samples
     )
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=dataset.get_collate_fn())
 
