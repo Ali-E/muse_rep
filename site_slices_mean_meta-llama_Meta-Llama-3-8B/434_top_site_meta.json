@@ -1,0 +1,20 @@
+{
+  "hook_name": "blocks.24.mlp.hook_post",
+  "layer": 24,
+  "site": "mlp_post",
+  "head": "",
+  "head_idx": null,
+  "positions_clean": [
+    15,
+    16,
+    17,
+    18,
+    19
+  ],
+  "tensor_shape": [
+    1,
+    4,
+    14336
+  ],
+  "notes": "Clean-run activations at answer-predicting positions for the top-restoring site."
+}

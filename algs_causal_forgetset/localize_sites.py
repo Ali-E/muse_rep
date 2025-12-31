@@ -6,6 +6,10 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 from transformer_lens import HookedTransformer
+from tqdm import tqdm
+
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from patch_sweep import (
     sweep_sites_with_pns,
@@ -91,7 +95,7 @@ def main():
     os.makedirs(out_root, exist_ok=True)
     out_samples: List[Dict[str, str]] = []
 
-    for sid in id_order:
+    for sid in tqdm(id_order, desc="Localizing sites"):
         group = by_id.get(sid, [])
         if not group:
             continue

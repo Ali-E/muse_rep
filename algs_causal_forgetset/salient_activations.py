@@ -1,9 +1,15 @@
 import argparse
 import csv
+import os
+import sys
 from typing import Dict, List, Optional
 
 import torch
 from transformer_lens import HookedTransformer
+
+# Ensure the project root (which contains helper modules like generate_corruptions, patch_sweep, judges, etc.)
+# is on the Python path when this script is run directly.
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from generate_corruptions import split_blank
 from patch_sweep import (

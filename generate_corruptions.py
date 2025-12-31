@@ -21,6 +21,7 @@ from typing import List, Dict, Tuple, Optional
 
 import torch
 from transformer_lens import HookedTransformer
+from tqdm import tqdm
 
 BLANK_RE = re.compile(r"_+")
 
@@ -310,14 +311,12 @@ def main():
         raise ValueError(f"CSV must have columns: {required_cols}")
 
     out_rows: List[Dict] = []
-    for i, row in enumerate(rows, start=1):
+    for i, row in enumerate(tqdm(rows, desc="Processing rows"), start=1):
         qid = str(row["id"])
         q = str(row["question"])
         a = str(row["answer"])
         res = process_row(model, qid, q, a, args.corruption, args)
         out_rows.extend(res)
-        if i % 25 == 0:
-            print(f"Processed {i}/{len(rows)} examples...")
 
     # Write output CSV
     fieldnames = [

@@ -67,6 +67,8 @@ def main():
     ap.add_argument("--device", default=None)
     ap.add_argument("--limit", type=int, default=None, help="Max unique ids to process")
     ap.add_argument("--ids", default=None, help="Comma-separated id list to process (overrides --limit)")
+    ap.add_argument("--ablation", choices=["zero", "mean"], default="zero",
+                    help="Ablation mode used during site sweep (default: zero)")
     args = ap.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
@@ -123,6 +125,7 @@ def main():
             sweep_mlp=True,
             sweep_resid=True,
             head_subsample=None,
+            ablation_mode=args.ablation,
         )
         if len(results) == 0:
             continue

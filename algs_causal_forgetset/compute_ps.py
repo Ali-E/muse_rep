@@ -1,9 +1,16 @@
 import argparse
 import csv
+import os
+import sys
 from typing import Dict, List, Tuple
 
 import torch
 from transformer_lens import HookedTransformer
+from tqdm import tqdm
+
+# Ensure the project root (which contains helper modules like generate_corruptions, activation_utils, etc.)
+# is on the Python path when this script is run directly.
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from generate_corruptions import split_blank
 from activation_utils import load_saved_site, make_patch_hook_from_slice
@@ -65,7 +72,7 @@ def main():
     agg_rows: List[Dict] = []
     detailed_rows: List[Dict] = []
 
-    for s in samples:
+    for s in tqdm(samples, desc="Computing PS per sample"):
         sid = s["sample_id"]
         meta_path = s["meta_path"]
         tensor_path = s["tensor_path"]
