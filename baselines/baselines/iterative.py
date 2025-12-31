@@ -36,10 +36,10 @@ def unlearn(
     wikitext_max_samples: int | None = None,
 ):
     if 'gd' in loss_type:
-        assert retain_data_file is not None, "Retain data must be specified for grad_diff."
+        assert retain_data_file is not None or use_wikitext, "Retain data must be specified for grad_diff (either retain_data_file or use_wikitext)."
 
     if 'simnpo' in loss_type:
-        gamma = 0.1
+        gamma = 0.3
         beta = 1.0
 
     model, tokenizer = load_model_and_tokenizer(

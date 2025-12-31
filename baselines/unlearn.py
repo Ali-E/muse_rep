@@ -41,6 +41,10 @@ def main():
         args.epochs = 5
         print(f"  beta={args.beta}, gamma={args.gamma}, lr={args.lr}, epochs={args.epochs}")
     
+    # elif 'gdr' in args.algo:
+    #     print("Using Gradient Difference hyperparameters for Books dataset from the paper:")
+    #     args.lr = 5e-6
+    
     elif 'rmu' in args.algo:
         print("Using RMU hyperparameters for Books dataset from the paper:")
         args.epochs = 1

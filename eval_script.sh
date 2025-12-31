@@ -32,7 +32,7 @@ python eval.py \
     --names "${algo_name}_0.05" "${algo_name}_0.1" "${algo_name}_0.25" "${algo_name}_0.5" "${algo_name}_1.0" \
     --corpus "${CORPUS}" \
     --indices_seed ${indices_seed} \
-    --out_file "${CORPUS}_results_${algo_name}.csv" \
+    --out_file "${CORPUS}_results_${algo_name}_5e-6.csv" \
     --metrics "${res_types[@]}" \
     --privleak_use_wikitext \
     --privleak_truncate_same_length
@@ -49,41 +49,41 @@ python eval.py \
     --names "${algo_name}_0.05" "${algo_name}_0.1" "${algo_name}_0.25" "${algo_name}_0.5" "${algo_name}_1.0" \
     --corpus "${CORPUS}" \
     --indices_seed ${indices_seed} \
-    --out_file "${CORPUS}_results_${algo_name}.csv" \
+    --out_file "${CORPUS}_results_${algo_name}_gamma0.3_beta1.0.csv" \
     --metrics "${res_types[@]}" \
     --privleak_use_wikitext \
     --privleak_truncate_same_length
 
 
-# algo="npo_gdr"
-# algo_name="npo_gdr_R_llama2"
-# python eval.py \
-#     --model_dirs "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_0.05_R_s1/" \
-#                              "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_0.1_R_s1/" \
-#                              "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_0.25_R_s1/" \
-#                              "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_0.5_R_s1/" \
-#                              "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_1.0_R/" \
-#     --names "${algo_name}_0.05" "${algo_name}_0.1" "${algo_name}_0.25" "${algo_name}_0.5" "${algo_name}_1.0" \
-#     --corpus "${CORPUS}" \
-#     --indices_seed ${indices_seed} \
-#     --out_file "${CORPUS}_results_${algo_name}.csv" \
-#     --metrics "${res_types[@]}" \
-#     --privleak_use_wikitext \
-#     --privleak_truncate_same_length
-
-
-algo="rmu"
-algo_name="rmu_U_llama2"
+algo="npo_gdr_wiki"
+algo_name="npo_gdr_wiki_U_llama2"
 python eval.py \
-    --model_dirs "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_0.05_U_s1/Epoch_1" \
-                             "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_0.1_U_s1/Epoch_1" \
-                             "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_0.25_U_s1/Epoch_1" \
-                             "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_0.5_U_s1/Epoch_1" \
-                             "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_1.0_U/Epoch_1" \
+    --model_dirs "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_0.05_U_s1/" \
+                             "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_0.1_U_s1/" \
+                             "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_0.25_U_s1/" \
+                             "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_0.5_U_s1/" \
+                             "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_1.0_U/" \
     --names "${algo_name}_0.05" "${algo_name}_0.1" "${algo_name}_0.25" "${algo_name}_0.5" "${algo_name}_1.0" \
     --corpus "${CORPUS}" \
     --indices_seed ${indices_seed} \
-    --out_file "${CORPUS}_results_${algo_name}.csv" \
+    --out_file "${CORPUS}_results_${algo_name}_1e-5.csv" \
+    --metrics "${res_types[@]}" \
+    --privleak_use_wikitext \
+    --privleak_truncate_same_length
+
+
+algo="gdr_simnpo_wiki"
+algo_name="gdr_simnpo_wiki_U_llama2"
+python eval.py \
+    --model_dirs "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_0.05_U_s1/" \
+                             "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_0.1_U_s1/" \
+                             "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_0.25_U_s1/" \
+                             "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_0.5_U_s1/" \
+                             "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_1.0_U/" \
+    --names "${algo_name}_0.05" "${algo_name}_0.1" "${algo_name}_0.25" "${algo_name}_0.5" "${algo_name}_1.0" \
+    --corpus "${CORPUS}" \
+    --indices_seed ${indices_seed} \
+    --out_file "${CORPUS}_results_${algo_name}_gamma0.3_beta1.0.csv" \
     --metrics "${res_types[@]}" \
     --privleak_use_wikitext \
     --privleak_truncate_same_length
