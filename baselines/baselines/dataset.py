@@ -430,7 +430,8 @@ class ForgetRetainDataset(DefaultDataset):
         index_file: str | None = None,
         ps_file: str | None = None,
         use_wikitext: bool = False,
-        wikitext_max_samples: Optional[int] = None
+        wikitext_max_samples: Optional[int] = None,
+        retain_portion: Optional[float] = None
     ):
         self.forget_dataset = DefaultDataset(
             forget_file_path, tokenizer,
@@ -470,9 +471,17 @@ class ForgetRetainDataset(DefaultDataset):
                 self.retain_exists = False
         elif retain_file_path is not None:
             self.retain_exists = True
+            # If retain_portion is provided, apply it to the retain dataset
+            # This allows scaling retain data proportionally with forget portion
+            actual_retain_portion = retain_portion if retain_portion is not None else 1.0
+            if actual_retain_portion < 1.0:
+                print(f"Scaling retain dataset: using portion={actual_retain_portion} (matching forget portion)")
+            else:
+                print(f"Loading full retain dataset (portion=1.0)")
             self.retain_dataset = DefaultDataset(
                 retain_file_path, tokenizer,
-                max_len=max_len, add_bos_token=add_bos_token, retain_flag=True
+                max_len=max_len, add_bos_token=add_bos_token, retain_flag=True,
+                portion=actual_retain_portion, rand_seed=rand_seed
             )
         else:
             self.retain_exists = False

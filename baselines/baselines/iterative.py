@@ -34,13 +34,18 @@ def unlearn(
     ps_file: str | None = None,
     use_wikitext: bool = False,
     wikitext_max_samples: int | None = None,
+    retain_portion: float | None = None,
 ):
     if 'gd' in loss_type:
         assert retain_data_file is not None or use_wikitext, "Retain data must be specified for grad_diff (either retain_data_file or use_wikitext)."
 
     if 'simnpo' in loss_type:
-        gamma = 0.3
-        beta = 1.0
+        print("Using SimNPO settings: ")
+        print(" beta:", beta)
+        print(" gamma:", gamma)
+        # gamma = 0.3
+        # beta = 1.0
+    
 
     model, tokenizer = load_model_and_tokenizer(
         model_dir,
@@ -79,7 +84,8 @@ def unlearn(
         upsampling=upsampling,
         ps_file=ps_file,
         use_wikitext=use_wikitext,
-        wikitext_max_samples=wikitext_max_samples
+        wikitext_max_samples=wikitext_max_samples,
+        retain_portion=retain_portion
     )
 
     if device_count() == 0:

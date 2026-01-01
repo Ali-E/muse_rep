@@ -69,6 +69,7 @@ def unlearn(
     ps_file: str | None = None,
     use_wikitext: bool = False,
     wikitext_max_samples: int | None = None,
+    retain_portion: float | None = None,
 ):
 
     updated_model, tokenizer = load_model_and_tokenizer(
@@ -93,7 +94,8 @@ def unlearn(
         upsampling=upsampling,
         ps_file=ps_file,
         use_wikitext=use_wikitext,
-        wikitext_max_samples=wikitext_max_samples
+        wikitext_max_samples=wikitext_max_samples,
+        retain_portion=retain_portion
     )
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=dataset.get_collate_fn())
 

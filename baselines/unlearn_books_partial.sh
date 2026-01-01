@@ -22,7 +22,7 @@ SEED=1
 
 # algo_list=('npo' 'npo_gdr' 'npo_klr')
 # algo_list=('rmu' 'npo_klr' 'simnpo')
-algo_list=('npo_gdr' 'gdr_simnpo')
+algo_list=('gdr_simnpo')
 # algo_list=('rmu')
 # algo_list=('npo' 'npo_gdr')
 # forget_portion_list=(0.75 1.0)
@@ -37,15 +37,15 @@ forget_portion_list=(0.05 0.1 0.25 0.5 1.0)
 for algo in "${algo_list[@]}"; do
     for forget_portion in "${forget_portion_list[@]}"; do
         # out_dir="./ckpt/$CORPUS/${algo}_${forget_portion}_R_s${SEED}"
-        # out_dir="./Llama2_ft/ckpt/$CORPUS/${algo}_${forget_portion}_U_s${SEED}"
-        out_dir="./Llama2_ft/ckpt/$CORPUS/${algo}_wiki_${forget_portion}_U_s${SEED}"
+        out_dir="./Llama2_ft/ckpt/$CORPUS/${algo}_${forget_portion}_U_s${SEED}"
+        # out_dir="./Llama2_ft/ckpt/$CORPUS/${algo}_wiki_${forget_portion}_U_s${SEED}"
         # out_dir="./ckpt/$CORPUS/${algo}_${forget_portion}_PS"
         # out_dir="./Llama2_ft/ckpt/$CORPUS/${algo}_${forget_portion}_U_s${SEED}"
         # if portion is 1.0 don't include seed in output directory
         if [ "$forget_portion" == "1.0" ]; then
             # out_dir="./ckpt/$CORPUS/${algo}_${forget_portion}_R"
-            # out_dir="./Llama2_ft/ckpt/$CORPUS/${algo}_${forget_portion}_U"
-            out_dir="./Llama2_ft/ckpt/$CORPUS/${algo}_wiki_${forget_portion}_U"
+            out_dir="./Llama2_ft/ckpt/$CORPUS/${algo}_${forget_portion}_U"
+            # out_dir="./Llama2_ft/ckpt/$CORPUS/${algo}_wiki_${forget_portion}_U"
             # out_dir="./ckpt/$CORPUS/${algo}_${forget_portion}_PS"
             # out_dir="./Llama2_ft/ckpt/$CORPUS/${algo}_${forget_portion}"
         fi
@@ -58,8 +58,8 @@ for algo in "${algo_list[@]}"; do
             --forget_portion $forget_portion \
             --per_device_batch_size $PER_DEVICE_BATCH_SIZE \
             --seed $SEED \
-            --auto_upsample \
-            --use_wikitext
+            --auto_upsample # \
+            # --use_wikitext
             # --ps_file ckpt/books/ps_agg_llama_all.csv
     done
 done

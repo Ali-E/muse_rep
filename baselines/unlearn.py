@@ -36,14 +36,16 @@ def main():
     # Set SimNPO hyperparameters for Books dataset according to the paper
     if 'simnpo' in args.algo:
         print("Using SimNPO hyperparameters for Books dataset from the paper:")
-        args.beta = 0.5
+        # args.beta = 0.5
         # args.gamma = 1.0
         args.epochs = 5
         print(f"  beta={args.beta}, gamma={args.gamma}, lr={args.lr}, epochs={args.epochs}")
     
-    # elif 'gdr' in args.algo:
-    #     print("Using Gradient Difference hyperparameters for Books dataset from the paper:")
-    #     args.lr = 5e-6
+    elif 'gdr' in args.algo:
+        print("Using Gradient Difference hyperparameters for Books dataset from the paper:")
+        args.lr = 5e-6
+        args.beta = 0.5
+        print(f"lr={args.lr}, epochs={args.epochs}, beta={args.beta}")
     
     elif 'rmu' in args.algo:
         print("Using RMU hyperparameters for Books dataset from the paper:")
@@ -79,6 +81,8 @@ def main():
         )
 
     elif args.algo == 'rmu':
+        # Determine retain_portion based on flags
+        retain_portion = args.forget_portion if (args.scale_retain_with_forget_portion and not args.auto_upsample and not args.use_wikitext) else None
         rmu_unlearn(
             args.model_dir, args.data_file, args.out_dir,
             retain_data_file=args.retain_data_file if not args.use_wikitext else None,
@@ -95,10 +99,13 @@ def main():
             alpha=args.alpha,
             ps_file=args.ps_file,
             use_wikitext=args.use_wikitext,
-            wikitext_max_samples=args.wikitext_max_samples
+            wikitext_max_samples=args.wikitext_max_samples,
+            retain_portion=retain_portion
         )
 
     else:
+        # Determine retain_portion based on flags
+        retain_portion = args.forget_portion if (args.scale_retain_with_forget_portion and not args.auto_upsample and not args.use_wikitext) else None
         it_unlearn(
             args.model_dir, args.data_file, args.out_dir,
             retain_data_file=args.retain_data_file if not args.use_wikitext else None,
@@ -124,7 +131,8 @@ def main():
             upsampling=args.upsample,
             ps_file=args.ps_file,
             use_wikitext=args.use_wikitext,
-            wikitext_max_samples=args.wikitext_max_samples
+            wikitext_max_samples=args.wikitext_max_samples,
+            retain_portion=retain_portion
         )
 
     return;
@@ -191,6 +199,11 @@ def get_args():
     parser.add_argument(
         '--ps_file', type=str, default=None,
         help="Path to PS scores CSV file (with sample_id and ps columns). When provided and portion < 1.0, samples are selected by descending PS scores instead of randomly."
+    )
+
+    parser.add_argument(
+        '--scale_retain_with_forget_portion', action='store_true',
+        help="If set, the retain/regularization dataset will be scaled with the same portion as the forget set (only applies when not using auto_upsample or WikiText)."
     )
 
     # Gradient ascent & Gradient difference
