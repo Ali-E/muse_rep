@@ -3,11 +3,11 @@ CORPUS="books"
 FORGET="../data/$CORPUS/raw/forget.txt"
 RETAIN="../data/$CORPUS/raw/retain1.txt"
 
-# TARGET_DIR="muse-bench/MUSE-Books_target"
-# LLAMA_DIR="meta-llama/Llama-2-7b-hf"
+TARGET_DIR="muse-bench/MUSE-Books_target"
+LLAMA_DIR="meta-llama/Llama-2-7b-hf"
 
-TARGET_DIR="meta-llama/Meta-Llama-3-8B"
-LLAMA_DIR="meta-llama/Meta-Llama-3-8B"
+# TARGET_DIR="meta-llama/Meta-Llama-3-8B"
+# LLAMA_DIR="meta-llama/Meta-Llama-3-8B"
 
 MAX_LEN=2048
 EPOCHS=1
@@ -43,10 +43,10 @@ for beta in "${beta_vals[@]}"; do
     for gamma in "${gamma_vals[@]}"; do
         for forget_portion in "${forget_portion_list[@]}"; do
             # out_dir="./Llama2_ft/ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_U_s${SEED}"
-            out_dir="./ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_U_s${SEED}"
+            out_dir="./ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_RU_s${SEED}"
             if [ "$forget_portion" == "1.0" ]; then
                 # out_dir="./Llama2_ft/ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_U"
-                out_dir="./ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_U"
+                out_dir="./ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_RU_s${SEED}"
             fi
             CUDA_VISIBLE_DEVICES=0,1,2,3 python unlearn.py \
                 --algo $algo \
@@ -56,8 +56,9 @@ for beta in "${beta_vals[@]}"; do
                 --max_len $MAX_LEN --epochs $EPOCHS --lr $LR \
                 --forget_portion $forget_portion \
                 --per_device_batch_size $PER_DEVICE_BATCH_SIZE \
+                --scale_retain_with_forget_portion \
+                --retain_data_file ../data/books/raw/retain1.txt \
                 --seed $SEED \
-                --auto_upsample \
                 --beta $beta \
                 --gamma $gamma
         done
