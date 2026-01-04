@@ -212,8 +212,8 @@ def compute_moderate_scores(
             outputs = model(**inputs, output_hidden_states=True)
             # Get the last hidden state (penultimate layer before lm_head)
             hidden_states = outputs.hidden_states[-1]
-            # Take mean pooling over sequence length
-            representation = hidden_states.mean(dim=1).squeeze().cpu().numpy()
+            # Take mean pooling over sequence length, convert to float32 for numpy compatibility
+            representation = hidden_states.mean(dim=1).squeeze().float().cpu().numpy()
         
         representations.append(representation)
     
@@ -307,12 +307,10 @@ def main():
                        help='Path to retain data file (txt, json, or CSV for GRAND with retain loss)')
     
     # Coreset arguments
-    parser.add_argument('--portion', type=float, default=0.1,
-                       help='Portion of data to select as coreset (default: 0.1 = 10%%)')
     parser.add_argument('--methods', nargs='+', 
                        choices=['grand', 'moderate', 'mink'],
                        default=['grand', 'moderate', 'mink'],
-                       help='Methods to use for coreset selection')
+                       help='Methods to use for scoring samples')
     
     # Method-specific arguments
     parser.add_argument('--loss_type', type=str, default='npo',
@@ -423,12 +421,33 @@ def main():
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
     
-    # Compute coresets for each method
-    results = {}
+    # Helper function to save results immediately
+    def save_method_results(method: str, scores: List[float], ids: List, texts: List[str]):
+        print(f"\nSaving {method} results...")
+        # Sort all samples by score (descending - highest score first)
+        sorted_indices = np.argsort(scores)[::-1]  # Descending order
+        
+        # Create sorted dataframe with all samples
+        df_sorted = pd.DataFrame({
+            'chunk_id': [ids[i] for i in sorted_indices],
+            'score': [scores[i] for i in sorted_indices],
+            'rank': range(1, len(sorted_indices) + 1),  # 1-based ranking
+            'text': [texts[i] for i in sorted_indices]
+        })
+        
+        # Save sorted CSV with all samples
+        output_file = os.path.join(args.output_dir, f"{args.output_prefix}_{method}_sorted.csv")
+        df_sorted.to_csv(output_file, index=False)
+        print(f"✓ Saved {method} sorted scores to: {output_file}")
+        print(f"  Total samples: {len(df_sorted)}")
+        print(f"  Top score: {df_sorted['score'].iloc[0]:.4f}")
+        print(f"  Bottom score: {df_sorted['score'].iloc[-1]:.4f}")
+    
+    # Compute and save each method immediately
     
     if 'grand' in args.methods:
         print("\n" + "="*80)
-        print("Computing GRAND coreset...")
+        print("Computing GRAND scores...")
         print("="*80)
         
         if retain_data is None:
@@ -448,21 +467,15 @@ def main():
             lambda_retain=args.lambda_retain
         )
         
-        grand_indices = select_coreset(grand_scores, args.portion, top_k=True)
-        
-        results['grand'] = {
-            'scores': grand_scores,
-            'indices': grand_indices,
-            'selected_ids': [forget_ids[i] for i in grand_indices],
-            'selected_texts': [forget_data[i] for i in grand_indices]
-        }
-        
-        print(f"GRAND: Selected {len(grand_indices)} samples (portion={args.portion})")
+        print(f"GRAND: Computed scores for {len(grand_scores)} samples")
         print(f"Score range: [{min(grand_scores):.4f}, {max(grand_scores):.4f}]")
+        
+        # Save immediately
+        save_method_results('grand', grand_scores, forget_ids, forget_data)
     
     if 'moderate' in args.methods:
         print("\n" + "="*80)
-        print("Computing MODERATE coreset...")
+        print("Computing MODERATE scores...")
         print("="*80)
         
         moderate_scores = compute_moderate_scores(
@@ -473,21 +486,15 @@ def main():
             device=device
         )
         
-        moderate_indices = select_coreset(moderate_scores, args.portion, top_k=True)
-        
-        results['moderate'] = {
-            'scores': moderate_scores,
-            'indices': moderate_indices,
-            'selected_ids': [forget_ids[i] for i in moderate_indices],
-            'selected_texts': [forget_data[i] for i in moderate_indices]
-        }
-        
-        print(f"MODERATE: Selected {len(moderate_indices)} samples (portion={args.portion})")
+        print(f"MODERATE: Computed scores for {len(moderate_scores)} samples")
         print(f"Score range: [{min(moderate_scores):.4f}, {max(moderate_scores):.4f}]")
+        
+        # Save immediately
+        save_method_results('moderate', moderate_scores, forget_ids, forget_data)
     
     if 'mink' in args.methods:
         print("\n" + "="*80)
-        print("Computing MIN-K% Prob coreset...")
+        print("Computing MIN-K% Prob scores...")
         print("="*80)
         
         mink_scores = []
@@ -495,56 +502,18 @@ def main():
             score = compute_mink_score(text, model, tokenizer, k_ratio=args.mink_k, device=device)
             mink_scores.append(score)
         
-        mink_indices = select_coreset(mink_scores, args.portion, top_k=True)
-        
-        results['mink'] = {
-            'scores': mink_scores,
-            'indices': mink_indices,
-            'selected_ids': [forget_ids[i] for i in mink_indices],
-            'selected_texts': [forget_data[i] for i in mink_indices]
-        }
-        
-        print(f"MIN-K% Prob: Selected {len(mink_indices)} samples (portion={args.portion})")
+        print(f"MIN-K% Prob: Computed scores for {len(mink_scores)} samples")
         print(f"Score range: [{min(mink_scores):.4f}, {max(mink_scores):.4f}]")
-    
-    # Save results
-    print("\n" + "="*80)
-    print("Saving results...")
-    print("="*80)
-    
-    for method, data in results.items():
-        # Save indices with original IDs
-        indices_file = os.path.join(args.output_dir, f"{args.output_prefix}_{method}_indices.csv")
-        df = pd.DataFrame({
-            'chunk_id': data['selected_ids'],
-            'list_index': data['indices'],
-            'score': [data['scores'][i] for i in data['indices']]
-        })
-        df.to_csv(indices_file, index=False)
-        print(f"Saved {method} indices to: {indices_file}")
         
-        # Save selected texts
-        texts_file = os.path.join(args.output_dir, f"{args.output_prefix}_{method}_texts.txt")
-        with open(texts_file, 'w') as f:
-            for text in data['selected_texts']:
-                f.write(text + '\n\n')
-        print(f"Saved {method} texts to: {texts_file}")
-        
-        # Save all scores with original IDs
-        scores_file = os.path.join(args.output_dir, f"{args.output_prefix}_{method}_all_scores.csv")
-        df_all = pd.DataFrame({
-            'chunk_id': forget_ids,
-            'list_index': range(len(data['scores'])),
-            'score': data['scores']
-        })
-        df_all.to_csv(scores_file, index=False)
-        print(f"Saved {method} all scores to: {scores_file}")
+        # Save immediately
+        save_method_results('mink', mink_scores, forget_ids, forget_data)
     
     print("\n" + "="*80)
-    print("Coreset computation completed!")
+    print("All coreset computations completed!")
     print("="*80)
-    print(f"Portion selected: {args.portion} ({int(args.portion * len(forget_data))} / {len(forget_data)} samples)")
-    print(f"Methods used: {', '.join(args.methods)}")
+    print(f"Total samples scored: {len(forget_data)}")
+    print(f"Methods completed: {', '.join(args.methods)}")
+    print(f"Output files saved to: {args.output_dir}")
 
 
 if __name__ == '__main__':

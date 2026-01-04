@@ -136,9 +136,11 @@ def verify_pairs(model, tokenizer, qa_dir: str, indices: list[int]) -> list[int]
 def main(
     key,
     qa_dir: str = "data/books_forget_matching_facts/",
-    model_name: str = "meta-llama/Meta-Llama-3-8B",
+    # model_name: str = "meta-llama/Meta-Llama-3-8B",
+    model_name: str = "muse-bench/MUSE-Books_target",
     matching_file: str = None,
-    tokenizer_name: str = "meta-llama/Meta-Llama-3-8B",
+    # tokenizer_name: str = "meta-llama/Meta-Llama-3-8B",
+    tokenizer_name: str = "meta-llama/Llama-2-7b-hf",
 ):
 
     ## temporary:
@@ -242,8 +244,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Find matching missing facts!")
     parser.add_argument("--qa_dir", default="data/books_forget_matching_facts/", help="Directory containing QA csv files")
-    # parser.add_argument("--model", default="muse-bench/MUSE-Books_target", help="Model name on HuggingFace")
-    parser.add_argument("--model", default="meta-llama/Meta-Llama-3-8B", help="Model name on HuggingFace")
+    parser.add_argument("--model", default="muse-bench/MUSE-Books_target", help="Model name on HuggingFace")
+    # parser.add_argument("--model", default="meta-llama/Meta-Llama-3-8B", help="Model name on HuggingFace")
     parser.add_argument("--matching_file", default=None, help="Path to the matching file")
     args = parser.parse_args()
 

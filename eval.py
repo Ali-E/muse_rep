@@ -484,13 +484,47 @@ def load_then_eval_models(
                 epochs_inc = [ep * increments for ep in epochs]
                 print('epochs_inc: ', epochs_inc)
             else:
-                epochs = [epoch]
-                portion = name.split('_')[-1]
-                increments = 1
-                if LLAMA_DIR == 'meta-llama/Meta-Llama-3-8B':
-                    increments = INCREMENTS_LLAMA3[corpus].get(portion, 1)
-                epochs_inc = [ep * increments for ep in epochs]
-                print('epochs_inc: ', epochs_inc)
+                # Positive epoch: use as index into sorted checkpoint list
+                import glob
+                checkpoint_dirs = glob.glob(os.path.join(model_dir, "checkpoint-*"))
+                if checkpoint_dirs:
+                    # Extract and sort checkpoint numbers
+                    available_ckpts = []
+                    for ckpt_dir in checkpoint_dirs:
+                        ckpt_name = os.path.basename(ckpt_dir)
+                        if ckpt_name.startswith("checkpoint-"):
+                            try:
+                                ckpt_num = int(ckpt_name.split("-")[1])
+                                available_ckpts.append(ckpt_num)
+                            except (ValueError, IndexError):
+                                continue
+                    available_ckpts = sorted(available_ckpts)
+                    
+                    if available_ckpts:
+                        # Use epoch as index (1-based) into the sorted checkpoint list
+                        if epoch <= len(available_ckpts):
+                            selected_ckpt = available_ckpts[epoch - 1]  # Convert to 0-based index
+                            epochs = [epoch]
+                            epochs_inc = [selected_ckpt]
+                            print(f'Available checkpoints: {available_ckpts}')
+                            print(f'Selected checkpoint at index {epoch}: {selected_ckpt}')
+                        else:
+                            print(f"Warning: epoch {epoch} exceeds number of available checkpoints ({len(available_ckpts)}), using last checkpoint")
+                            epochs = [len(available_ckpts)]
+                            epochs_inc = [available_ckpts[-1]]
+                    else:
+                        print(f"Warning: No checkpoints found in {model_dir}, using epoch 0")
+                        epochs = [0]
+                        epochs_inc = [0]
+                else:
+                    # Fallback to old behavior if no checkpoints found
+                    epochs = [epoch]
+                    portion = name.split('_')[-1]
+                    increments = 1
+                    if LLAMA_DIR == 'meta-llama/Meta-Llama-3-8B':
+                        increments = INCREMENTS_LLAMA3[corpus].get(portion, 1)
+                    epochs_inc = [ep * increments for ep in epochs]
+                    print(f'No checkpoints found, using computed epochs_inc: {epochs_inc}')
         else:
             epochs = [0]
             epochs_inc = [0]

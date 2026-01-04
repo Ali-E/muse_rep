@@ -1,13 +1,34 @@
 from openai import OpenAI
 import requests
 import json
+import os
+import httpx
 
 
 def get_openai_client(key):
-    return OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=key,
-    )
+    # For OpenAI library v1.23.0+, create httpx client with explicit transport settings
+    # This avoids proxy-related issues
+    try:
+        # Create httpx client that explicitly ignores system proxies
+        http_client = httpx.Client(
+            transport=httpx.HTTPTransport(retries=3),
+            timeout=30.0
+        )
+        
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=key,
+            http_client=http_client,
+        )
+    except Exception as e:
+        # Fallback: try without custom http_client
+        print(f"Warning: Could not create custom http_client ({e}), trying default initialization")
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=key,
+        )
+    
+    return client
 
 def get_response_from_openai(client, prompt):
 
@@ -20,7 +41,8 @@ def get_response_from_openai(client, prompt):
       # model="qwen/qwq-32b:free",
       # model="qwen/qwen3-235b-a22b-07-25:free",
       # model="Qwen/Qwen3-235B-A22B-Instruct-2507"
-      model="qwen/qwen3-235b-a22b:free",
+      # model="qwen/qwen3-235b-a22b:free",
+      model="qwen/qwen-2.5-vl-7b-instruct:free",
       messages=[
         {
           "role": "user",
@@ -44,7 +66,8 @@ def get_response_direct(key, prompt):
       },
       data=json.dumps({
         # "model": "qwen/qwq-32b:free",
-        "model": "qwen/qwen3-235b-a22b-07-25:free",
+        # "model": "qwen/qwen3-235b-a22b-07-25:free",
+        "model": "qwen/qwen-2.5-vl-7b-instruct:free",
         "messages": [
           {
             "role": "user",

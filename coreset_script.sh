@@ -1,5 +1,4 @@
 CORPUS="books"
-res_types=("knowmem_r" "knowfacts_f" "privleak" "privleak++" "privleak_zlib" "fluency_wikitext" "fluency_c4" "fluency_lambada" "fluency_hellaswag" )
 # res_types=("knowmem_r" "knowmem_f" "privleak" "privleak++" "privleak_zlib" "fluency_wikitext" "fluency_c4" "fluency_lambada" "fluency_hellaswag" )
 # res_types=("knowfacts_f")
 # res_types=("privleak" "privleak++" "privleak_zlib" )
@@ -7,7 +6,6 @@ res_types=("knowmem_r" "knowfacts_f" "privleak" "privleak++" "privleak_zlib" "fl
 # res_types=("knowmem_f")
 # res_types=("knowmem_r")
 
-indices_seed=1
 
 # python eval.py \
 #     --model_dirs "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_0.05_s1/" \
@@ -42,24 +40,16 @@ indices_seed=1
 # if [ "$forget_portion" == "1.0" ]; then
     # out_dir="./Llama2_ft/ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_U"
 
-algo="gdr_simnpo"
-beta=1.0
-gamma=0.5
-algo_name="simnpo_U_llama3_beta${beta}_gamma${gamma}"
-python eval.py \
-    --model_dirs "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_0.05_U_s1/" \
-                             "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_0.1_U_s1/" \
-                             "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_0.25_U_s1/" \
-                             "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_0.5_U_s1/" \
-                             "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_1.0_U/" \
-    --names "${algo_name}_0.05" "${algo_name}_0.1" "${algo_name}_0.25" "${algo_name}_0.5" "${algo_name}_1.0" \
-    --corpus "${CORPUS}" \
-    --indices_seed ${indices_seed} \
-    --out_file "${CORPUS}_results_${algo_name}_e1.csv" \
-    --epoch 1 \
-    --metrics "${res_types[@]}" \
-    --privleak_use_wikitext \
-    --privleak_truncate_same_length
+
+CUDA_VISIBLE_DEVICES=2 python compute_coreset.py \
+    --model_dir muse-bench/MUSE-Books_target \
+    --tokenizer_dir meta-llama/Llama-2-7b-hf \
+    --forget_file data/books/raw/forget_chunks.csv \
+    --retain_file data/books/raw/retain1.txt \
+    --methods grand \
+    --output_dir coresets/books \
+    --output_prefix coreset
+
 
 
 # algo="gdr_simnpo"

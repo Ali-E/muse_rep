@@ -35,8 +35,8 @@ forget_portion_list=(0.05 0.1 0.25 0.5 1.0)
 # forget_portion_list=(1.0)
 
 
-beta_vals=(0.5)
-gamma_vals=(0.3 0.4)
+beta_vals=(1.0)
+gamma_vals=(0.5)
 
 
 for beta in "${beta_vals[@]}"; do

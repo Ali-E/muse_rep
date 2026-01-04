@@ -288,10 +288,22 @@ def eval(
                     ppl_nonmember = [d[ppl_type] for d in log0]
                     ppl_member = [d[ppl_type] for d in log1]
                     
-                    # Balance the dataset sizes to ensure AUC baseline is 0.5
-                    min_size = min(len(ppl_nonmember), len(ppl_member))
-                    ppl_nonmember = ppl_nonmember[:min_size]
-                    ppl_member = ppl_member[:min_size]
+                    # Use all samples, but upsample smaller dataset to balance
+                    n0, n1 = len(ppl_nonmember), len(ppl_member)
+                    
+                    if n0 != n1:
+                        # Upsample the smaller dataset by repeating samples
+                        max_size = max(n0, n1)
+                        if n0 < n1:
+                            # Upsample nonmember (negative class)
+                            repeats = (max_size + n0 - 1) // n0  # Ceiling division
+                            ppl_nonmember = (ppl_nonmember * repeats)[:max_size]
+                            print(f"  {split1}_{split0}_{ppl_type}: Upsampled negative samples from {n0} to {len(ppl_nonmember)} to match {n1} positive samples")
+                        else:
+                            # Upsample member (positive class)
+                            repeats = (max_size + n1 - 1) // n1
+                            ppl_member = (ppl_member * repeats)[:max_size]
+                            print(f"  {split1}_{split0}_{ppl_type}: Upsampled positive samples from {n1} to {len(ppl_member)} to match {n0} negative samples")
                     
                     ppl = np.array(ppl_nonmember + ppl_member)
                     y = np.array([0] * len(ppl_nonmember) + [1] * len(ppl_member))
@@ -355,10 +367,22 @@ def eval(
                     ppl_nonmember = [d[ppl_type] for d in log0]
                     ppl_member = [d[ppl_type] for d in log1]
                     
-                    # Balance the dataset sizes to ensure AUC baseline is 0.5
-                    min_size = min(len(ppl_nonmember), len(ppl_member))
-                    ppl_nonmember = ppl_nonmember[:min_size]
-                    ppl_member = ppl_member[:min_size]
+                    # Use all samples, but upsample smaller dataset to balance
+                    n0, n1 = len(ppl_nonmember), len(ppl_member)
+                    
+                    if n0 != n1:
+                        # Upsample the smaller dataset by repeating samples
+                        max_size = max(n0, n1)
+                        if n0 < n1:
+                            # Upsample nonmember (negative class)
+                            repeats = (max_size + n0 - 1) // n0  # Ceiling division
+                            ppl_nonmember = (ppl_nonmember * repeats)[:max_size]
+                            print(f"  {split1}_{split0}_{ppl_type}: Upsampled negative samples from {n0} to {len(ppl_nonmember)} to match {n1} positive samples")
+                        else:
+                            # Upsample member (positive class)
+                            repeats = (max_size + n1 - 1) // n1
+                            ppl_member = (ppl_member * repeats)[:max_size]
+                            print(f"  {split1}_{split0}_{ppl_type}: Upsampled positive samples from {n1} to {len(ppl_member)} to match {n0} negative samples")
                     
                     ppl = np.array(ppl_nonmember + ppl_member)
                     y = np.array([0] * len(ppl_nonmember) + [1] * len(ppl_member))

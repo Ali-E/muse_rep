@@ -2,8 +2,8 @@ SUPPORTED_METRICS = ['verbmem_f', 'privleak', 'knowmem_f', 'knowmem_r', 'knowfac
 
 CORPORA = ['news', 'books']
 
-LLAMA_DIR = "meta-llama/Llama-2-7b-hf"
-# LLAMA_DIR = "meta-llama/Meta-Llama-3-8B"
+# LLAMA_DIR = "meta-llama/Llama-2-7b-hf"
+LLAMA_DIR = "meta-llama/Meta-Llama-3-8B"
 
 # LLAMA_DIR = "EleutherAI/pythia-2.8b"
 # LLAMA_DIR = "EleutherAI/pythia-6.9b"
@@ -20,7 +20,7 @@ DEFAULT_DATA = {
         'knowmem_retain_qa_icl_file': "data/news/knowmem/retain_qa_icl.json",
     },
     'books': {
-        'forget_file': "data/books/raw/forget_chunks.txt",
+        'forget_file': "data/books/raw/forget_chunks.csv",
         # 'verbmem_forget_file': "data/books/verbmem/forget.json",
         'verbmem_forget_file': "data/books/verbmem/verbatim_all_rows.csv",
         'privleak_forget_file': "data/books/privleak/forget.json",
