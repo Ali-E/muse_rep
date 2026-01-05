@@ -64,13 +64,13 @@ indices_seed=1
 algo="gdr_simnpo"
 beta=1.0
 gamma=0.5
-algo_name="simnpo_RU_llama2_beta${beta}_gamma${gamma}"
+algo_name="simnpo_llama2_beta${beta}_gamma${gamma}"
 python eval.py \
-    --model_dirs "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_0.05_RU_s1/" \
-                             "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_0.1_RU_s1/" \
-                             "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_0.25_RU_s1/" \
-                             "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_0.5_RU_s1/" \
-                             "/scratch/aebrahim/muse_rep/baselines/Llama2_ft/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_1.0_RU_s1/" \
+    --model_dirs "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_0.05_s1/" \
+                             "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_0.1_s1/" \
+                             "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_0.25_s1/" \
+                             "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_0.5_s1/" \
+                             "/scratch/aebrahim/muse_rep/baselines/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_1.0_s1/" \
     --names "${algo_name}_0.05" "${algo_name}_0.1" "${algo_name}_0.25" "${algo_name}_0.5" "${algo_name}_1.0" \
     --corpus "${CORPUS}" \
     --indices_seed ${indices_seed} \

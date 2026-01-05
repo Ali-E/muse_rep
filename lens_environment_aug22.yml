@@ -193,7 +193,7 @@ dependencies:
       - tinycss2==1.4.0
       - tokenizers==0.21.2
       - torch==2.7.1
-      - torchtyping==0.1.5
+      - torchtyping
       - tornado==6.5.1
       - tqdm==4.67.1
       - traitlets==5.14.3
@@ -201,7 +201,7 @@ dependencies:
       - transformers==4.53.2
       - transformers-stream-generator==0.0.5
       - triton==3.3.1
-      - typeguard==2.13.3
+      - typeguard
       - types-python-dateutil==2.9.0.20250822
       - typing-extensions==4.14.1
       - typing-inspection==0.4.1

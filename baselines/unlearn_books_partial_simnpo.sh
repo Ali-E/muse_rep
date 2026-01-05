@@ -35,18 +35,18 @@ forget_portion_list=(0.05 0.1 0.25 0.5 1.0)
 # forget_portion_list=(1.0)
 
 
-beta_vals=(1.0)
-gamma_vals=(0.5)
+beta_vals=(1.0 1.5)
+gamma_vals=(0.7)
 
 
 for beta in "${beta_vals[@]}"; do
     for gamma in "${gamma_vals[@]}"; do
         for forget_portion in "${forget_portion_list[@]}"; do
-            # out_dir="./Llama2_ft/ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_U_s${SEED}"
-            out_dir="./ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_RU_s${SEED}"
+            out_dir="./Llama2_ft/ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_U_s${SEED}"
+            # out_dir="./ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_s${SEED}"
             if [ "$forget_portion" == "1.0" ]; then
-                # out_dir="./Llama2_ft/ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_U"
-                out_dir="./ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_RU_s${SEED}"
+                out_dir="./Llama2_ft/ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_U_s${SEED}"
+                # out_dir="./ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_s${SEED}"
             fi
             CUDA_VISIBLE_DEVICES=0,1,2,3 python unlearn.py \
                 --algo $algo \
@@ -56,11 +56,14 @@ for beta in "${beta_vals[@]}"; do
                 --max_len $MAX_LEN --epochs $EPOCHS --lr $LR \
                 --forget_portion $forget_portion \
                 --per_device_batch_size $PER_DEVICE_BATCH_SIZE \
-                --scale_retain_with_forget_portion \
-                --retain_data_file ../data/books/raw/retain1.txt \
                 --seed $SEED \
+                --auto_upsample \
                 --beta $beta \
                 --gamma $gamma
         done
     done
 done
+
+
+                # --scale_retain_with_forget_portion \
+                # --retain_data_file ../data/books/raw/retain1.txt \
