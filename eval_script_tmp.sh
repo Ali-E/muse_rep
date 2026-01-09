@@ -66,14 +66,12 @@ indices_seed=1
 algo="gdr_simnpo"
 beta=1.0
 gamma=0.5
-algo_name="simnpo_U_llama2_mine_beta${beta}_gamma${gamma}"
-CUDA_VISIBLE_DEVICES=1 python eval.py \
-    --model_dirs "/scratch/aebrahim/muse_rep/baselines/Llama2_ft_mine/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_0.05_U_s1/" \
-                             "/scratch/aebrahim/muse_rep/baselines/Llama2_ft_mine/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_0.1_U_s1/" \
-                             "/scratch/aebrahim/muse_rep/baselines/Llama2_ft_mine/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_0.25_U_s1/" \
+algo_name="simnpo_U_llama2_mine_rest_beta${beta}_gamma${gamma}"
+CUDA_VISIBLE_DEVICES=2 python eval.py \
+    --model_dirs "/scratch/aebrahim/muse_rep/baselines/Llama2_ft_mine/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_0.25_U_s1/" \
                              "/scratch/aebrahim/muse_rep/baselines/Llama2_ft_mine/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_0.5_U_s1/" \
                              "/scratch/aebrahim/muse_rep/baselines/Llama2_ft_mine/ckpt/${CORPUS}/${algo}_b${beta}_g${gamma}_1.0_U_s1/" \
-    --names "${algo_name}_0.05" "${algo_name}_0.1" "${algo_name}_0.25" "${algo_name}_0.5" "${algo_name}_1.0" \
+    --names "${algo_name}_0.25" "${algo_name}_0.5" "${algo_name}_1.0" \
     --corpus "${CORPUS}" \
     --indices_seed ${indices_seed} \
     --out_file "${CORPUS}_results_${algo_name}.csv" \

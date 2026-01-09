@@ -26,12 +26,116 @@ from transformer_lens import HookedTransformer
 from tqdm import tqdm
 import pandas as pd
 
+# Function words and other tokens to skip
+FUNCTION_WORDS = {
+    'the', 'a', 'an', 'and', 'or', 'but', 'if', 'then', 'of', 'to', 'in', 'on', 'at', 'by', 'for',
+    'with', 'from', 'as', 'is', 'was', 'are', 'were', 'be', 'been', 'being', 'have', 'has', 'had',
+    'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'can',
+    'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him',
+    'her', 'us', 'them', 'my', 'your', 'his', 'its', 'our', 'their', 'mine', 'yours', 'hers',
+    'ours', 'theirs', 'who', 'what', 'when', 'where', 'why', 'how', 'which', 'whom', 'whose',
+    'not', 'no', 'yes', 'so', 'too', 'very', 'just', 'also', 'only', 'both', 'each', 'every',
+    'all', 'some', 'any', 'few', 'many', 'much', 'more', 'most', 'such', 'own', 'same', 'other',
+    'another', 'than', 'into', 'about', 'after', 'before', 'through', 'during', 'above', 'below',
+    'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'once', 'here', 'there',
+    'am', 'been', 'being', "'s", "'t", "'re", "'ve", "'d", "'ll", "'m", "n't"
+}
+
+def is_content_word(token_str: str) -> bool:
+    """
+    Check if a token is a content word (not a function word, punctuation, number, or whitespace).
+    
+    Args:
+        token_str: The string representation of the token
+        
+    Returns:
+        True if it's a content word, False otherwise
+    """
+    # Remove leading/trailing whitespace for checking
+    cleaned = token_str.strip()
+    
+    # Skip empty or whitespace-only tokens
+    if not cleaned or cleaned.isspace():
+        return False
+    
+    # Skip punctuation-only tokens
+    if all(c in '.,!?;:\'"()[]{}/-–—…' for c in cleaned):
+        return False
+    
+    # Skip number-only tokens
+    if cleaned.replace('.', '').replace(',', '').replace('-', '').isdigit():
+        return False
+    
+    # Skip tokens that start with special characters (like Ġ for GPT-style tokenizers)
+    # but check the actual word part
+    word_part = cleaned.lstrip('Ġ▁')  # Remove common BPE prefixes
+    
+    # Check if it's a function word (case-insensitive)
+    if word_part.lower() in FUNCTION_WORDS:
+        return False
+    
+    # If it contains at least one alphabetic character and passes other filters, it's likely a content word
+    if any(c.isalpha() for c in word_part):
+        return True
+    
+    return False
+
 def load_model(model_name: str, tokenizer_name: Optional[str] = None, device: Optional[str] = None):
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
     if tokenizer_name is None:
         tokenizer_name = model_name
-    model = HookedTransformer.from_pretrained(model_name, tokenizer=tokenizer_name, device=device)
+    
+    # Load tokenizer as object first
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, use_fast=False)
+    
+    # Check if model_name is a local path
+    if os.path.exists(model_name):
+        print(f"Loading model from local path: {model_name}")
+        
+        # Load HuggingFace model first
+        hf_model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch.bfloat16,
+            device_map='auto'
+        )
+        
+        # Determine the official model name for HookedTransformer
+        config_path = os.path.join(model_name, "config.json")
+        official_name = "meta-llama/Llama-2-7b-hf"  # default
+        
+        if os.path.exists(config_path):
+            import json
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            
+            # Infer official model name from config
+            if config.get("model_type") == "llama":
+                hidden_size = config.get("hidden_size", 4096)
+                num_layers = config.get("num_hidden_layers", 32)
+                
+                if hidden_size == 4096 and num_layers == 32:
+                    official_name = "meta-llama/Llama-2-7b-hf"
+                elif hidden_size == 5120 and num_layers == 40:
+                    official_name = "meta-llama/Llama-2-13b-hf"
+        
+        print(f"Wrapping with HookedTransformer using architecture: {official_name}")
+        
+        # Wrap with HookedTransformer
+        model = HookedTransformer.from_pretrained(
+            official_name,
+            hf_model=hf_model,
+            tokenizer=tokenizer,
+            fold_ln=False,
+            center_writing_weights=False,
+            center_unembed=False,
+        )
+    else:
+        # Load from HuggingFace Hub or official model name
+        print(f"Loading model from HuggingFace: {model_name}")
+        model = HookedTransformer.from_pretrained(model_name, tokenizer=tokenizer, device=device)
+    
     return model, device
 
 def seq_logprob(model: HookedTransformer, prefix: str, answer: str) -> float:
@@ -182,12 +286,14 @@ def lm_single_token_proposals(
     model: HookedTransformer,
     question_text: str,
     top_k: int = 50,
-    max_per_pos: int = 2,
+    max_per_pos: int = 10,
     max_total: int = 10,
     fluency_tau: float = 0.8,
+    only_content_words: bool = True,
 ) -> List[Dict]:
     """
     Propose fluent single-token substitutions in the question.
+    Only considers content words if only_content_words=True.
     """
     toks = model.to_tokens(question_text, prepend_bos=True)
     str_toks = model.to_str_tokens(question_text, prepend_bos=True)
@@ -199,6 +305,10 @@ def lm_single_token_proposals(
     for j in range(1, toks.shape[1]):
         orig_id = int(toks[0, j].item())
         orig_str = str_toks[j]
+        
+        # Skip if not a content word (when filter is enabled)
+        if only_content_words and not is_content_word(orig_str):
+            continue
 
         # Distribution for token j based on left prefix only
         prefix = toks[:, :j]
@@ -293,6 +403,7 @@ def process_chunk(
             max_per_pos=args.max_per_pos,
             max_total=args.max_total,
             fluency_tau=args.fluency_tau,
+            only_content_words=args.only_content_words,
         )
         
         # Score proposals by decrease in answer avg log-prob
@@ -336,13 +447,15 @@ def main():
 
     # Corruption hyperparams
     ap.add_argument("--top_k", type=int, default=40, help="Top-k alternatives per position")
-    ap.add_argument("--max_per_pos", type=int, default=2, help="Max kept per position")
+    ap.add_argument("--max_per_pos", type=int, default=10, help="Max kept per position")
     ap.add_argument("--max_total", type=int, default=20, help="Max proposals per subsequence")
     ap.add_argument("--fluency_tau", type=float, default=0.8, help="Max allowed increase in prompt avg NLL (nats)")
     ap.add_argument("--min_effect_drop", type=float, default=0.08, 
                     help="Min required DROP in answer avg log-prob (nats, positive value expected)")
     ap.add_argument("--max_corruptions_per_seq", type=int, default=20,
                     help="Max number of corruptions to keep per subsequence (top k by largest drop)")
+    ap.add_argument("--only_content_words", action='store_true', 
+                    help="Only corrupt content words (skip function words, punctuation, numbers)")
 
     ap.add_argument("--limit", type=int, default=None, help="Process only first N chunks")
     ap.add_argument("--device", type=str, default=None, help="Device (cuda/cpu)")

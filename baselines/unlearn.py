@@ -100,7 +100,8 @@ def main():
             ps_file=args.ps_file,
             use_wikitext=args.use_wikitext,
             wikitext_max_samples=args.wikitext_max_samples,
-            retain_portion=retain_portion
+            retain_portion=retain_portion,
+            save_only_final=args.save_only_final
         )
 
     else:
@@ -132,7 +133,8 @@ def main():
             ps_file=args.ps_file,
             use_wikitext=args.use_wikitext,
             wikitext_max_samples=args.wikitext_max_samples,
-            retain_portion=retain_portion
+            retain_portion=retain_portion,
+            save_only_final=args.save_only_final
         )
 
     return;
@@ -227,6 +229,10 @@ def get_args():
     parser.add_argument(
         '--epochs', type=int, default=5,
         help="Number of epochs of training if algo is either gradient ascent (ga), gradient difference (gd), or task vector (tv)."
+    )
+    parser.add_argument(
+        '--save_only_final', action='store_true',
+        help="If set, save only the final model instead of checkpoints after each epoch."
     )
 
     # Task vector

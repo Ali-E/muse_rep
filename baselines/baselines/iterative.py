@@ -1,4 +1,4 @@
-from .utils import load_model_and_tokenizer, load_model
+from .utils import load_model_and_tokenizer, load_model, save_hooked_model
 from .dataset import ForgetRetainDataset
 
 import torch
@@ -35,6 +35,8 @@ def unlearn(
     use_wikitext: bool = False,
     wikitext_max_samples: int | None = None,
     retain_portion: float | None = None,
+    save_only_final: bool = False,
+    use_hooked_transformer: bool = False,
 ):
     if 'gd' in loss_type:
         assert retain_data_file is not None or use_wikitext, "Retain data must be specified for grad_diff (either retain_data_file or use_wikitext)."
@@ -49,11 +51,12 @@ def unlearn(
 
     model, tokenizer = load_model_and_tokenizer(
         model_dir,
-        tokenizer_dir=tokenizer_dir
+        tokenizer_dir=tokenizer_dir,
+        use_hooked_transformer=use_hooked_transformer
     )
 
     ref_model = (
-        load_model(model_dir)
+        load_model(model_dir, tokenizer=tokenizer, use_hooked_transformer=use_hooked_transformer)
         if 'npo' in loss_type or 'kl' in loss_type
         else None
     )
@@ -96,7 +99,7 @@ def unlearn(
         per_device_train_batch_size=per_device_batch_size,
         gradient_accumulation_steps=4,  # Effective batch size = per_device_batch_size * num_gpus * grad_accum_steps
         learning_rate=learning_rate,
-        save_strategy='epoch',  # Save every epoch
+        save_strategy='no' if save_only_final else 'epoch',  # Save only at end or every epoch
         num_train_epochs=epochs,
         optim='adamw_torch',
         lr_scheduler_type='constant',
@@ -134,7 +137,10 @@ def unlearn(
     # Gradient checkpointing is already configured in training_args
 
     trainer.train(resume_from_checkpoint=resume_from_checkpoint)
-    trainer.save_model(out_dir)
+    
+    # Save model - handle HookedTransformer specially
+    save_hooked_model(model, out_dir)
+    tokenizer.save_pretrained(out_dir)
 
 
 

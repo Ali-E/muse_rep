@@ -1,4 +1,4 @@
-from .utils import load_model_and_tokenizer, load_model
+from .utils import load_model_and_tokenizer, load_model, save_hooked_model
 from .dataset import ForgetRetainDataset
 
 import torch
@@ -70,15 +70,18 @@ def unlearn(
     use_wikitext: bool = False,
     wikitext_max_samples: int | None = None,
     retain_portion: float | None = None,
+    save_only_final: bool = False,
+    use_hooked_transformer: bool = False,
 ):
 
     updated_model, tokenizer = load_model_and_tokenizer(
         model_dir,
-        tokenizer_dir=tokenizer_dir
+        tokenizer_dir=tokenizer_dir,
+        use_hooked_transformer=use_hooked_transformer
     )
 
     frozen_model = (
-        load_model(model_dir)
+        load_model(model_dir, tokenizer=tokenizer, use_hooked_transformer=use_hooked_transformer)
     )
 
     dataset = ForgetRetainDataset(
@@ -149,8 +152,15 @@ def unlearn(
                 # if iterno == num_batches-1:
                 #     break 
 
-    updated_model.save_pretrained(f'{out_dir}/Epoch_{epoch+1}/')
-    tokenizer.save_pretrained(f'{out_dir}/Epoch_{epoch+1}/')
-    print(f"Saved model to {out_dir}/Epoch_{epoch+1}")
+        if not save_only_final:
+            save_hooked_model(updated_model, f'{out_dir}/Epoch_{epoch+1}/')
+            tokenizer.save_pretrained(f'{out_dir}/Epoch_{epoch+1}/')
+            print(f"Saved model to {out_dir}/Epoch_{epoch+1}")
+
+    # Always save final model
+    if save_only_final:
+        save_hooked_model(updated_model, out_dir)
+        tokenizer.save_pretrained(out_dir)
+        print(f"Saved final model to {out_dir}")
 
   

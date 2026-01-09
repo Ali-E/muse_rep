@@ -1,9 +1,12 @@
+#!/bin/bash
+
 CORPUS="books"
 
 FORGET="../data/$CORPUS/raw/forget.txt"
 RETAIN="../data/$CORPUS/raw/retain1.txt"
 
-TARGET_DIR="muse-bench/MUSE-Books_target"
+# TARGET_DIR="muse-bench/MUSE-Books_target"
+TARGET_DIR="/scratch/aebrahim/muse_rep/finetuned_books_model/"
 LLAMA_DIR="meta-llama/Llama-2-7b-hf"
 
 # TARGET_DIR="meta-llama/Meta-Llama-3-8B"
@@ -35,17 +38,17 @@ forget_portion_list=(0.05 0.1 0.25 0.5 1.0)
 # forget_portion_list=(1.0)
 
 
-beta_vals=(1.0 1.5)
-gamma_vals=(0.7)
+beta_vals=(1.0)
+gamma_vals=(0.5 0.7)
 
 
 for beta in "${beta_vals[@]}"; do
     for gamma in "${gamma_vals[@]}"; do
         for forget_portion in "${forget_portion_list[@]}"; do
-            out_dir="./Llama2_ft/ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_U_s${SEED}"
+            out_dir="./Llama2_ft_mine/ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_U_s${SEED}"
             # out_dir="./ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_s${SEED}"
             if [ "$forget_portion" == "1.0" ]; then
-                out_dir="./Llama2_ft/ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_U_s${SEED}"
+                out_dir="./Llama2_ft_mine/ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_U_s${SEED}"
                 # out_dir="./ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_s${SEED}"
             fi
             CUDA_VISIBLE_DEVICES=0,1,2,3 python unlearn.py \
@@ -59,7 +62,8 @@ for beta in "${beta_vals[@]}"; do
                 --seed $SEED \
                 --auto_upsample \
                 --beta $beta \
-                --gamma $gamma
+                --gamma $gamma \
+                --save_only_final
         done
     done
 done

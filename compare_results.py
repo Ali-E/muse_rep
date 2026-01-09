@@ -68,7 +68,7 @@ plt.savefig('comparison_plot_all_metrics.png', dpi=300, bbox_inches='tight')
 print(f"Saved plot with {len(plot_columns)} metrics to 'comparison_plot_all_metrics_randonly.png'")
 
 # Create a second figure with key metrics only
-key_metrics = ['knowmem_f', 'fluency_lambada_acc']
+key_metrics = ['knowmem_f', 'fluency_lambada_acc', '']
 key_metrics = [m for m in key_metrics if m in plot_columns]
 
 # Baseline values at including_ratio = 0 (pretrained model)
@@ -96,7 +96,7 @@ if key_metrics:
         y_PS_with_baseline = np.concatenate([[baseline_values[col]], y_PS])
         
         ax.plot(x_R_with_baseline, y_R_with_baseline, marker='o', linewidth=2.5, markersize=10, label='Random (R)', color='#2E86AB')
-        # ax.plot(x_PS_with_baseline, y_PS_with_baseline, marker='s', linewidth=2.5, markersize=10, label='PS-based', color='#A23B72')
+        ax.plot(x_PS_with_baseline, y_PS_with_baseline, marker='s', linewidth=2.5, markersize=10, label='PS-based', color='#A23B72')
         
         ax.set_xlabel('Including Ratio', fontsize=12, fontweight='bold')
         ax.set_ylabel(col.replace('_', ' ').title(), fontsize=12, fontweight='bold')
@@ -104,7 +104,7 @@ if key_metrics:
         ax.legend(loc='best', fontsize=11)
         ax.grid(True, alpha=0.3, linestyle='--')
         ax.set_xlim(-0.02, 0.27)
-        ax.set_xticks([0, 0.05, 0.1, 0.25])
+        ax.set_xticks([0, 0.05, 0.1, 0.25, 0.5, 1.0])
     
     plt.tight_layout()
     plt.savefig('comparison_plot_key_metrics.png', dpi=300, bbox_inches='tight')
