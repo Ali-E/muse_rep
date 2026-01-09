@@ -72,16 +72,18 @@ def unlearn(
     retain_portion: float | None = None,
     save_only_final: bool = False,
     use_hooked_transformer: bool = False,
+    hf_token: str | None = None,
 ):
 
     updated_model, tokenizer = load_model_and_tokenizer(
         model_dir,
         tokenizer_dir=tokenizer_dir,
-        use_hooked_transformer=use_hooked_transformer
+        use_hooked_transformer=use_hooked_transformer,
+        hf_token=hf_token
     )
 
     frozen_model = (
-        load_model(model_dir, tokenizer=tokenizer, use_hooked_transformer=use_hooked_transformer)
+        load_model(model_dir, tokenizer=tokenizer, use_hooked_transformer=use_hooked_transformer, hf_token=hf_token)
     )
 
     dataset = ForgetRetainDataset(

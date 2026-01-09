@@ -37,6 +37,7 @@ def unlearn(
     retain_portion: float | None = None,
     save_only_final: bool = False,
     use_hooked_transformer: bool = False,
+    hf_token: str | None = None,
 ):
     if 'gd' in loss_type:
         assert retain_data_file is not None or use_wikitext, "Retain data must be specified for grad_diff (either retain_data_file or use_wikitext)."
@@ -52,11 +53,12 @@ def unlearn(
     model, tokenizer = load_model_and_tokenizer(
         model_dir,
         tokenizer_dir=tokenizer_dir,
-        use_hooked_transformer=use_hooked_transformer
+        use_hooked_transformer=use_hooked_transformer,
+        hf_token=hf_token
     )
 
     ref_model = (
-        load_model(model_dir, tokenizer=tokenizer, use_hooked_transformer=use_hooked_transformer)
+        load_model(model_dir, tokenizer=tokenizer, use_hooked_transformer=use_hooked_transformer, hf_token=hf_token)
         if 'npo' in loss_type or 'kl' in loss_type
         else None
     )

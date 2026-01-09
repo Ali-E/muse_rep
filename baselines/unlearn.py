@@ -101,7 +101,8 @@ def main():
             use_wikitext=args.use_wikitext,
             wikitext_max_samples=args.wikitext_max_samples,
             retain_portion=retain_portion,
-            save_only_final=args.save_only_final
+            save_only_final=args.save_only_final,
+            hf_token=args.hf_token
         )
 
     else:
@@ -134,7 +135,8 @@ def main():
             use_wikitext=args.use_wikitext,
             wikitext_max_samples=args.wikitext_max_samples,
             retain_portion=retain_portion,
-            save_only_final=args.save_only_final
+            save_only_final=args.save_only_final,
+            hf_token=args.hf_token
         )
 
     return;
@@ -150,6 +152,10 @@ def get_args():
     parser.add_argument(
         '--tokenizer_dir', type=str, default='meta-llama/Llama-2-7b-hf',
         help="Path to the tokenizer's hf directory. Defaults to the target model's directory."
+    )
+    parser.add_argument(
+        '--hf_token', type=str, default=None,
+        help="HuggingFace token for private models (optional)."
     )
     parser.add_argument(
         '--data_file', type=str, default='../data/books/raw/forget.txt',

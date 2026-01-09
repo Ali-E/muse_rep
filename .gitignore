@@ -13,6 +13,7 @@ temp/*
 !data/*.txt
 !matching_facts_combined.csv
 !books_forget.csv
+!corruptions/chunk_corruptions.csv
 key.csv
 *.png
 plot_results.py

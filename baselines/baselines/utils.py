@@ -79,7 +79,8 @@ def load_model(
     quantization_config: any = None,
     reinforced_model_dir: str | None = None,
     use_hooked_transformer: bool = False,
-    tokenizer: AutoTokenizer | None = None
+    tokenizer: AutoTokenizer | None = None,
+    hf_token: str | None = None
 ) -> AutoModelForCausalLM:
     def extract_alpha(s):
         pattern = r'alpha=([+-]?\d*\.\d+|[+-]?\d+)'
@@ -106,7 +107,8 @@ def load_model(
             hf_model = AutoModelForCausalLM.from_pretrained(
                 model_dir,
                 torch_dtype=torch.bfloat16,
-                device_map='auto'
+                device_map='auto',
+                token=hf_token
             )
             # Wrap it with HookedTransformer
             model = HookedTransformer.from_pretrained(
@@ -151,7 +153,8 @@ def load_model(
         model_dir,
         quantization_config=quantization_config,
         torch_dtype=torch.bfloat16,
-        device_map='auto'
+        device_map='auto',
+        token=hf_token
     )
     return model
 
@@ -159,9 +162,10 @@ def load_model(
 def load_tokenizer(
     tokenizer_dir: str,
     add_pad_token: bool = True,
-    use_fast: bool = True
+    use_fast: bool = True,
+    hf_token: str | None = None
 ) -> AutoTokenizer:
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_dir, use_fast=use_fast) 
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_dir, use_fast=use_fast, token=hf_token) 
     if add_pad_token:
         tokenizer.pad_token = tokenizer.eos_token
     return tokenizer
@@ -174,10 +178,11 @@ def load_model_and_tokenizer(
     add_pad_token: bool = True,
     quantization_config: any = None,
     reinforced_model_dir: str | None = None,
-    use_hooked_transformer: bool = False
+    use_hooked_transformer: bool = False,
+    hf_token: str | None = None
 ) -> Tuple[AutoModelForCausalLM, AutoTokenizer]:
     # Load tokenizer first (needed for HookedTransformer)
-    tokenizer = (load_tokenizer(tokenizer_dir, add_pad_token)
+    tokenizer = (load_tokenizer(tokenizer_dir, add_pad_token, hf_token=hf_token)
                  if tokenizer_dir is not None
                  else None)
     
@@ -185,7 +190,8 @@ def load_model_and_tokenizer(
         model_dir, model_name, quantization_config,
         reinforced_model_dir=reinforced_model_dir,
         use_hooked_transformer=use_hooked_transformer,
-        tokenizer=tokenizer
+        tokenizer=tokenizer,
+        hf_token=hf_token
     )
     
     return model, tokenizer
