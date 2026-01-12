@@ -99,14 +99,14 @@ def unlearn(
     training_args = transformers.TrainingArguments(
         output_dir=out_dir,
         per_device_train_batch_size=per_device_batch_size,
-        gradient_accumulation_steps=4,  # Effective batch size = per_device_batch_size * num_gpus * grad_accum_steps
+        gradient_accumulation_steps=2,  # Effective batch size = per_device_batch_size * num_gpus * grad_accum_steps
         learning_rate=learning_rate,
         save_strategy='no' if save_only_final else 'epoch',  # Save only at end or every epoch
         num_train_epochs=epochs,
         optim='adamw_torch',
         lr_scheduler_type='constant',
         bf16=True,
-        gradient_checkpointing=True,  # Enable gradient checkpointing to save memory
+        gradient_checkpointing=False,  # Enable gradient checkpointing to save memory
         gradient_checkpointing_kwargs={"use_reentrant": False},  # Recommended setting
         report_to='none',        # Disable wandb
         skip_memory_metrics=True   # For DataParallel compatibility

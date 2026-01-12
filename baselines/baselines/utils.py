@@ -162,7 +162,7 @@ def load_model(
 def load_tokenizer(
     tokenizer_dir: str,
     add_pad_token: bool = True,
-    use_fast: bool = True,
+    use_fast: bool = False,
     hf_token: str | None = None
 ) -> AutoTokenizer:
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_dir, use_fast=use_fast, token=hf_token) 
