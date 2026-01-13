@@ -72,6 +72,7 @@ def unlearn(
     wikitext_coeff: float = 1.0,
     retain_coeff: float = 1.0,
     retain_portion: float | None = None,
+    save_only_final: bool = False,
 ):
 
     updated_model, tokenizer = load_model_and_tokenizer(
@@ -168,8 +169,10 @@ def unlearn(
                 # if iterno == num_batches-1:
                 #     break 
 
-    updated_model.save_pretrained(f'{out_dir}/Epoch_{epoch+1}/')
-    tokenizer.save_pretrained(f'{out_dir}/Epoch_{epoch+1}/')
-    print(f"Saved model to {out_dir}/Epoch_{epoch+1}")
+        # Save model after each epoch (unless save_only_final is True)
+        if not save_only_final or epoch == epochs - 1:
+            updated_model.save_pretrained(f'{out_dir}/Epoch_{epoch+1}/')
+            tokenizer.save_pretrained(f'{out_dir}/Epoch_{epoch+1}/')
+            print(f"Saved model to {out_dir}/Epoch_{epoch+1}")
 
   
