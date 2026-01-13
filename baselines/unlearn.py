@@ -43,8 +43,8 @@ def main():
     
     elif 'gdr' in args.algo:
         print("Using Gradient Difference hyperparameters for Books dataset from the paper:")
-        args.lr = 5e-6
-        args.beta = 0.5
+        # args.lr = 5e-6
+        # args.beta = 0.5
         print(f"lr={args.lr}, epochs={args.epochs}, beta={args.beta}")
     
     elif 'rmu' in args.algo:
@@ -85,7 +85,7 @@ def main():
         retain_portion = args.forget_portion if (args.scale_retain_with_forget_portion and not args.auto_upsample and not args.use_wikitext) else None
         rmu_unlearn(
             args.model_dir, args.data_file, args.out_dir,
-            retain_data_file=args.retain_data_file if not args.use_wikitext else None,
+            retain_data_file=args.retain_data_file,
             batch_size=args.per_device_batch_size,
             epochs=args.epochs,
             learning_rate=args.lr,
@@ -100,9 +100,10 @@ def main():
             ps_file=args.ps_file,
             use_wikitext=args.use_wikitext,
             wikitext_max_samples=args.wikitext_max_samples,
+            wikitext_coeff=args.wikitext_coeff,
+            retain_coeff=args.retain_coeff,
             retain_portion=retain_portion,
-            save_only_final=args.save_only_final,
-            hf_token=args.hf_token
+            save_only_final=args.save_only_final
         )
 
     else:
@@ -110,7 +111,7 @@ def main():
         retain_portion = args.forget_portion if (args.scale_retain_with_forget_portion and not args.auto_upsample and not args.use_wikitext) else None
         it_unlearn(
             args.model_dir, args.data_file, args.out_dir,
-            retain_data_file=args.retain_data_file if not args.use_wikitext else None,
+            retain_data_file=args.retain_data_file,
             loss_type=args.algo,
             per_device_batch_size=args.per_device_batch_size,
             epochs=args.epochs,
@@ -134,9 +135,10 @@ def main():
             ps_file=args.ps_file,
             use_wikitext=args.use_wikitext,
             wikitext_max_samples=args.wikitext_max_samples,
+            wikitext_coeff=args.wikitext_coeff,
+            retain_coeff=args.retain_coeff,
             retain_portion=retain_portion,
-            save_only_final=args.save_only_final,
-            hf_token=args.hf_token
+            save_only_final=args.save_only_final
         )
 
     return;
@@ -152,10 +154,6 @@ def get_args():
     parser.add_argument(
         '--tokenizer_dir', type=str, default='meta-llama/Llama-2-7b-hf',
         help="Path to the tokenizer's hf directory. Defaults to the target model's directory."
-    )
-    parser.add_argument(
-        '--hf_token', type=str, default=None,
-        help="HuggingFace token for private models (optional)."
     )
     parser.add_argument(
         '--data_file', type=str, default='../data/books/raw/forget.txt',
@@ -222,11 +220,19 @@ def get_args():
     )
     parser.add_argument(
         '--use_wikitext', action='store_true',
-        help="Use WikiText-2 as retain/regularization data instead of retain_data_file."
+        help="Use WikiText-2 as retain/regularization data. Can be combined with retain_data_file."
     )
     parser.add_argument(
         '--wikitext_max_samples', type=int, default=None,
         help="Maximum number of WikiText samples to use (default: use all available)."
+    )
+    parser.add_argument(
+        '--wikitext_coeff', type=float, default=1.0,
+        help="Weight coefficient for WikiText regularization loss (default: 1.0)."
+    )
+    parser.add_argument(
+        '--retain_coeff', type=float, default=1.0,
+        help="Weight coefficient for retain_data_file regularization loss (default: 1.0)."
     )
     parser.add_argument(
         '--lr', type=float, default=1e-5,

@@ -9,26 +9,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import json
 import re
 
-try:
-    from transformer_lens import HookedTransformer
-    HOOKED_TRANSFORMER_AVAILABLE = True
-except ImportError:
-    HOOKED_TRANSFORMER_AVAILABLE = False
-
-
-def save_hooked_model(model, save_path: str):
-    """
-    Save a HookedTransformer model in standard transformers format.
-    Extracts the underlying HuggingFace model and saves it.
-    """
-    if hasattr(model, 'model'):
-        # HookedTransformer wraps the actual model
-        underlying_model = model.model
-        underlying_model.save_pretrained(save_path)
-    else:
-        # Fallback to standard save
-        model.save_pretrained(save_path)
-
 
 def get_rootpath():
     return str(Path(__file__).parent.resolve())
@@ -77,53 +57,13 @@ def load_model(
     model_dir: str,
     model_name: str | None = None,
     quantization_config: any = None,
-    reinforced_model_dir: str | None = None,
-    use_hooked_transformer: bool = False,
-    tokenizer: AutoTokenizer | None = None,
-    hf_token: str | None = None
+    reinforced_model_dir: str | None = None
 ) -> AutoModelForCausalLM:
     def extract_alpha(s):
         pattern = r'alpha=([+-]?\d*\.\d+|[+-]?\d+)'
         match = re.search(pattern, s)
         if match: return float(match.group(1))
         else: return None
-
-    if use_hooked_transformer:
-        if not HOOKED_TRANSFORMER_AVAILABLE:
-            raise ImportError(
-                "transformer_lens is not installed. "
-                "Please install it with: pip install transformer-lens"
-            )
-        if tokenizer is None:
-            raise ValueError(
-                "tokenizer must be provided when use_hooked_transformer=True. "
-                "Load tokenizer first with load_tokenizer() and pass it to load_model()."
-            )
-        print(f"Loading model as HookedTransformer from {model_dir}")
-        
-        # For local paths, load via HuggingFace first then wrap with HookedTransformer
-        if os.path.exists(model_dir):
-            # Load the base HuggingFace model
-            hf_model = AutoModelForCausalLM.from_pretrained(
-                model_dir,
-                torch_dtype=torch.bfloat16,
-                device_map='auto',
-                token=hf_token
-            )
-            # Wrap it with HookedTransformer
-            model = HookedTransformer.from_pretrained(
-                model_dir,
-                hf_model=hf_model,
-                tokenizer=tokenizer,
-                device='cuda' if torch.cuda.is_available() else 'cpu',
-                fold_ln=False,
-                center_writing_weights=False,
-                center_unembed=False,
-            )
-        else:
-            # For official model names, use direct loading
-            model = HookedTransformer.from_pretrained(model_dir, tokenizer=tokenizer)
-        return model
 
     if model_name is not None:
         alpha = extract_alpha(model_name)
@@ -153,8 +93,7 @@ def load_model(
         model_dir,
         quantization_config=quantization_config,
         torch_dtype=torch.bfloat16,
-        device_map='auto',
-        token=hf_token
+        device_map='auto'
     )
     return model
 
@@ -162,10 +101,9 @@ def load_model(
 def load_tokenizer(
     tokenizer_dir: str,
     add_pad_token: bool = True,
-    use_fast: bool = False,
-    hf_token: str | None = None
+    use_fast: bool = True
 ) -> AutoTokenizer:
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_dir, use_fast=use_fast, token=hf_token) 
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_dir, use_fast=use_fast) 
     if add_pad_token:
         tokenizer.pad_token = tokenizer.eos_token
     return tokenizer
@@ -177,23 +115,15 @@ def load_model_and_tokenizer(
     tokenizer_dir: str | None = None,
     add_pad_token: bool = True,
     quantization_config: any = None,
-    reinforced_model_dir: str | None = None,
-    use_hooked_transformer: bool = False,
-    hf_token: str | None = None
+    reinforced_model_dir: str | None = None
 ) -> Tuple[AutoModelForCausalLM, AutoTokenizer]:
-    # Load tokenizer first (needed for HookedTransformer)
-    tokenizer = (load_tokenizer(tokenizer_dir, add_pad_token, hf_token=hf_token)
-                 if tokenizer_dir is not None
-                 else None)
-    
     model = load_model(
         model_dir, model_name, quantization_config,
-        reinforced_model_dir=reinforced_model_dir,
-        use_hooked_transformer=use_hooked_transformer,
-        tokenizer=tokenizer,
-        hf_token=hf_token
+        reinforced_model_dir=reinforced_model_dir
     )
-    
+    tokenizer = (load_tokenizer(tokenizer_dir, add_pad_token)
+                 if tokenizer_dir is not None
+                 else None)
     return model, tokenizer
 
 

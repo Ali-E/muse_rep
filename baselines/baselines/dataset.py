@@ -431,6 +431,8 @@ class ForgetRetainDataset(DefaultDataset):
         ps_file: str | None = None,
         use_wikitext: bool = False,
         wikitext_max_samples: Optional[int] = None,
+        wikitext_coeff: float = 1.0,
+        retain_coeff: float = 1.0,
         retain_portion: Optional[float] = None
     ):
         self.forget_dataset = DefaultDataset(
@@ -438,9 +440,17 @@ class ForgetRetainDataset(DefaultDataset):
             max_len=max_len, add_bos_token=add_bos_token, portion=portion, exclude_file=exclude_file, include_file=include_file, rand_seed=rand_seed, upsampling=upsampling, ps_file=ps_file # forget_subset_indices=forget_subset_indices
         )
 
-        # Load retain data: either from file or WikiText
+        # Store coefficients for weighted losses
+        self.wikitext_coeff = wikitext_coeff
+        self.retain_coeff = retain_coeff
+        
+        # Initialize retain datasets
+        self.wikitext_dataset = None
+        self.retain_dataset = None
+        
+        # Load WikiText if requested
         if use_wikitext:
-            print("Using WikiText-2 as retain/regularization data")
+            print(f"Using WikiText-2 as retain/regularization data (coeff={wikitext_coeff})")
             wikitext_chunks = load_wikitext_as_chunks(
                 tokenizer=tokenizer,
                 max_len=max_len,
@@ -448,9 +458,9 @@ class ForgetRetainDataset(DefaultDataset):
                 split='train'
             )
             if wikitext_chunks:
-                # Create a temporary file-like structure for WikiText
-                self.retain_dataset = DefaultDataset.__new__(DefaultDataset)
-                self.retain_dataset.input_ids = []
+                # Create WikiText dataset separately
+                self.wikitext_dataset = DefaultDataset.__new__(DefaultDataset)
+                self.wikitext_dataset.input_ids = []
                 for chunk_text in wikitext_chunks:
                     encoding: torch.Tensor = tokenizer(
                         chunk_text,
@@ -462,15 +472,15 @@ class ForgetRetainDataset(DefaultDataset):
                         target_length=max_len,
                         padding_value=tokenizer.pad_token_id
                     )
-                    self.retain_dataset.input_ids.append(encoding)
-                self.retain_dataset.strings = wikitext_chunks
-                self.retain_exists = True
-                print(f"Loaded {len(self.retain_dataset.input_ids)} WikiText chunks as retain data")
+                    self.wikitext_dataset.input_ids.append(encoding)
+                self.wikitext_dataset.strings = wikitext_chunks
+                print(f"Loaded {len(self.wikitext_dataset.input_ids)} WikiText chunks as retain data")
             else:
-                print("Warning: WikiText loading failed, no retain data will be used")
-                self.retain_exists = False
-        elif retain_file_path is not None:
-            self.retain_exists = True
+                print("Warning: WikiText loading failed")
+        
+        # Load retain file if provided
+        if retain_file_path is not None:
+            print(f"Loading retain data from file (coeff={retain_coeff})")
             # If retain_portion is provided, apply it to the retain dataset
             # This allows scaling retain data proportionally with forget portion
             actual_retain_portion = retain_portion if retain_portion is not None else 1.0
@@ -483,20 +493,35 @@ class ForgetRetainDataset(DefaultDataset):
                 max_len=max_len, add_bos_token=add_bos_token, retain_flag=True,
                 portion=actual_retain_portion, rand_seed=rand_seed
             )
+        
+        # Determine if we have any retain data
+        self.retain_exists = (self.wikitext_dataset is not None or self.retain_dataset is not None)
+        if not self.retain_exists:
+            print("No retain data loaded")
         else:
-            self.retain_exists = False
+            if self.wikitext_dataset and self.retain_dataset:
+                print(f"Using both WikiText ({len(self.wikitext_dataset.input_ids)} samples, coeff={wikitext_coeff}) and retain file ({len(self.retain_dataset.input_ids)} samples, coeff={retain_coeff})")
+            elif self.wikitext_dataset:
+                print(f"Using only WikiText ({len(self.wikitext_dataset.input_ids)} samples, coeff={wikitext_coeff})")
+            elif self.retain_dataset:
+                print(f"Using only retain file ({len(self.retain_dataset.input_ids)} samples, coeff={retain_coeff})")
 
         self.tokenizer = tokenizer
 
 
     def __getitem__(self, index):
-        if self.retain_exists:
-            return (
-                self.forget_dataset[index],
-                self.retain_dataset[index % len(self.retain_dataset)]
-            )
-        else:
-            return self.forget_dataset[index], None
+        forget_item = self.forget_dataset[index]
+        
+        wikitext_item = None
+        retain_item = None
+        
+        if self.wikitext_dataset is not None:
+            wikitext_item = self.wikitext_dataset[index % len(self.wikitext_dataset)]
+        
+        if self.retain_dataset is not None:
+            retain_item = self.retain_dataset[index % len(self.retain_dataset)]
+        
+        return forget_item, wikitext_item, retain_item
 
 
     def __len__(self):
@@ -505,8 +530,8 @@ class ForgetRetainDataset(DefaultDataset):
 
     def get_collate_fn(self):
 
-        def collate_fn(batch: List[Tuple[torch.Tensor, torch.Tensor]]):
-            batch_forget = torch.stack([pair[0] for pair in batch])
+        def collate_fn(batch: List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]):
+            batch_forget = torch.stack([item[0] for item in batch])
             
             # Create attention mask: 1 for real tokens, 0 for padding
             attention_mask_forget = (batch_forget != self.tokenizer.pad_token_id).long()
@@ -521,10 +546,24 @@ class ForgetRetainDataset(DefaultDataset):
                 "attention_mask": attention_mask_forget
             }
 
-            if self.retain_exists:
-                batch_retain = torch.stack([pair[1] for pair in batch])
+            # Handle WikiText data
+            dict_wikitext = None
+            if self.wikitext_dataset is not None:
+                batch_wikitext = torch.stack([item[1] for item in batch])
+                attention_mask_wikitext = (batch_wikitext != self.tokenizer.pad_token_id).long()
+                labels_wikitext = batch_wikitext.clone()
+                labels_wikitext[batch_wikitext == self.tokenizer.pad_token_id] = -100
                 
-                # Same for retain data
+                dict_wikitext = {
+                    "input_ids": batch_wikitext,
+                    "labels": labels_wikitext,
+                    "attention_mask": attention_mask_wikitext
+                }
+            
+            # Handle retain file data
+            dict_retain = None
+            if self.retain_dataset is not None:
+                batch_retain = torch.stack([item[2] for item in batch])
                 attention_mask_retain = (batch_retain != self.tokenizer.pad_token_id).long()
                 labels_retain = batch_retain.clone()
                 labels_retain[batch_retain == self.tokenizer.pad_token_id] = -100
@@ -534,9 +573,7 @@ class ForgetRetainDataset(DefaultDataset):
                     "labels": labels_retain,
                     "attention_mask": attention_mask_retain
                 }
-            else:
-                dict_retain = None
 
-            return dict_forget, dict_retain
+            return dict_forget, dict_wikitext, dict_retain
 
         return collate_fn

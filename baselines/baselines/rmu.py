@@ -1,4 +1,4 @@
-from .utils import load_model_and_tokenizer, load_model, save_hooked_model
+from .utils import load_model_and_tokenizer, load_model
 from .dataset import ForgetRetainDataset
 
 import torch
@@ -69,21 +69,18 @@ def unlearn(
     ps_file: str | None = None,
     use_wikitext: bool = False,
     wikitext_max_samples: int | None = None,
+    wikitext_coeff: float = 1.0,
+    retain_coeff: float = 1.0,
     retain_portion: float | None = None,
-    save_only_final: bool = False,
-    use_hooked_transformer: bool = False,
-    hf_token: str | None = None,
 ):
 
     updated_model, tokenizer = load_model_and_tokenizer(
         model_dir,
-        tokenizer_dir=tokenizer_dir,
-        use_hooked_transformer=use_hooked_transformer,
-        hf_token=hf_token
+        tokenizer_dir=tokenizer_dir
     )
 
     frozen_model = (
-        load_model(model_dir, tokenizer=tokenizer, use_hooked_transformer=use_hooked_transformer, hf_token=hf_token)
+        load_model(model_dir)
     )
 
     dataset = ForgetRetainDataset(
@@ -100,6 +97,8 @@ def unlearn(
         ps_file=ps_file,
         use_wikitext=use_wikitext,
         wikitext_max_samples=wikitext_max_samples,
+        wikitext_coeff=wikitext_coeff,
+        retain_coeff=retain_coeff,
         retain_portion=retain_portion
     )
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=dataset.get_collate_fn())
@@ -122,7 +121,7 @@ def unlearn(
     for epoch in range(epochs):
         print(f"======= Epoch {epoch} =======")
         with tqdm.tqdm(total=num_batches) as pbar:
-            for iterno, (forget_data, retain_data) in enumerate(dataloader):
+            for iterno, (forget_data, wikitext_data, retain_data) in enumerate(dataloader):
     
     
                 updated_forget_activations = forward_with_cache(
@@ -131,15 +130,30 @@ def unlearn(
 
                 unlearn_loss = torch.nn.functional.mse_loss(updated_forget_activations, control_vec)
 
-                # Retain loss
-                updated_retain_activations = forward_with_cache(
-                    updated_model, retain_data, module=updated_module, no_grad=False
-                ).to(updated_model.device)
-                frozen_retain_activations = forward_with_cache(
-                    frozen_model, retain_data, module=frozen_module, no_grad=True
-                ).to(updated_model.device)
-
-                retain_loss = torch.nn.functional.mse_loss(updated_retain_activations, frozen_retain_activations)
+                # Retain loss - combine WikiText and retain_file with coefficients
+                retain_loss = 0.0
+                
+                # WikiText retain loss
+                if wikitext_data is not None:
+                    updated_wikitext_activations = forward_with_cache(
+                        updated_model, wikitext_data, module=updated_module, no_grad=False
+                    ).to(updated_model.device)
+                    frozen_wikitext_activations = forward_with_cache(
+                        frozen_model, wikitext_data, module=frozen_module, no_grad=True
+                    ).to(updated_model.device)
+                    wikitext_loss = torch.nn.functional.mse_loss(updated_wikitext_activations, frozen_wikitext_activations)
+                    retain_loss += wikitext_loss * dataset.wikitext_coeff
+                
+                # Retain file retain loss
+                if retain_data is not None:
+                    updated_retain_activations = forward_with_cache(
+                        updated_model, retain_data, module=updated_module, no_grad=False
+                    ).to(updated_model.device)
+                    frozen_retain_activations = forward_with_cache(
+                        frozen_model, retain_data, module=frozen_module, no_grad=True
+                    ).to(updated_model.device)
+                    retain_file_loss = torch.nn.functional.mse_loss(updated_retain_activations, frozen_retain_activations)
+                    retain_loss += retain_file_loss * dataset.retain_coeff
 
                 # Update model
                 # import pdb;pdb.set_trace()
@@ -154,15 +168,8 @@ def unlearn(
                 # if iterno == num_batches-1:
                 #     break 
 
-        if not save_only_final:
-            save_hooked_model(updated_model, f'{out_dir}/Epoch_{epoch+1}/')
-            tokenizer.save_pretrained(f'{out_dir}/Epoch_{epoch+1}/')
-            print(f"Saved model to {out_dir}/Epoch_{epoch+1}")
-
-    # Always save final model
-    if save_only_final:
-        save_hooked_model(updated_model, out_dir)
-        tokenizer.save_pretrained(out_dir)
-        print(f"Saved final model to {out_dir}")
+    updated_model.save_pretrained(f'{out_dir}/Epoch_{epoch+1}/')
+    tokenizer.save_pretrained(f'{out_dir}/Epoch_{epoch+1}/')
+    print(f"Saved model to {out_dir}/Epoch_{epoch+1}")
 
   

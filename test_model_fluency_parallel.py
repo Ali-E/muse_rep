@@ -29,6 +29,7 @@ def main():
     parser.add_argument("--output_file", default=None, help="Output JSON file to save results")
     parser.add_argument("--max_length", type=int, default=512, help="Maximum chunk length for perplexity computation (default: 512)")
     parser.add_argument("--stride", type=int, default=256, help="Stride for sliding window, overlap = max_length - stride (default: 256)")
+    parser.add_argument("--wikitext_samples", type=int, default=100, help="Number of WikiText-2 samples to evaluate (default: 100)")
     args = parser.parse_args()
     
     if args.tokenizer is None:
@@ -206,6 +207,80 @@ def main():
                 print("✗ Poor: Model shows significant fluency problems")
             print()
             
+            # Evaluate on WikiText-2 samples
+            print("\n" + "="*80)
+            print("WIKITEXT-2 EVALUATION")
+            print("="*80)
+            print(f"Evaluating on {args.wikitext_samples} WikiText-2 samples...")
+            
+            try:
+                from datasets import load_dataset
+                import torch
+                from transformers import AutoModelForCausalLM, AutoTokenizer
+                import numpy as np
+                
+                # Load WikiText-2
+                wikitext = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
+                wikitext_texts = [item['text'] for item in wikitext if len(item['text'].strip()) > 50]
+                
+                # Sample texts
+                import random
+                random.seed(42)
+                sampled_texts = random.sample(wikitext_texts, min(args.wikitext_samples, len(wikitext_texts)))
+                
+                print(f"Loaded {len(sampled_texts)} WikiText-2 samples")
+                print("Loading model for WikiText evaluation...")
+                
+                # Load model and tokenizer
+                tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, use_fast=False)
+                if tokenizer.pad_token is None:
+                    tokenizer.pad_token = tokenizer.eos_token
+                
+                model = AutoModelForCausalLM.from_pretrained(
+                    args.model,
+                    torch_dtype=torch.bfloat16,
+                    device_map="auto"
+                )
+                model.eval()
+                
+                # Import compute_perplexity from test_model_fluency
+                sys.path.insert(0, str(Path(__file__).parent))
+                from test_model_fluency import compute_perplexity
+                
+                # Compute perplexity on WikiText samples
+                wikitext_perplexities = []
+                for i, text in enumerate(sampled_texts):
+                    if (i + 1) % 20 == 0:
+                        print(f"  Processed {i + 1}/{len(sampled_texts)} samples...")
+                    ppl = compute_perplexity(model, tokenizer, text, model.device, 
+                                           max_length=args.max_length, stride=args.stride)
+                    wikitext_perplexities.append(ppl)
+                
+                wikitext_avg = np.mean(wikitext_perplexities)
+                wikitext_std = np.std(wikitext_perplexities)
+                wikitext_min = np.min(wikitext_perplexities)
+                wikitext_max = np.max(wikitext_perplexities)
+                
+                print(f"\nWikiText-2 Results:")
+                print(f"  Samples: {len(wikitext_perplexities)}")
+                print(f"  Avg Perplexity: {wikitext_avg:.2f}")
+                print(f"  Std Dev: {wikitext_std:.2f}")
+                print(f"  Min: {wikitext_min:.2f}")
+                print(f"  Max: {wikitext_max:.2f}")
+                
+                wikitext_results = {
+                    "num_samples": len(wikitext_perplexities),
+                    "avg_perplexity": float(wikitext_avg),
+                    "std_perplexity": float(wikitext_std),
+                    "min_perplexity": float(wikitext_min),
+                    "max_perplexity": float(wikitext_max),
+                    "perplexities": [float(p) for p in wikitext_perplexities]
+                }
+                
+            except Exception as e:
+                print(f"Warning: WikiText evaluation failed: {e}")
+                wikitext_results = None
+            
             # Save results to file if requested
             if args.output_file:
                 results = {
@@ -218,12 +293,82 @@ def main():
                         "max_perplexity": float(overall_max)
                     },
                     "per_file": per_file_results,
+                    "wikitext": wikitext_results,
                     "all_perplexities": [float(p) for p in all_perplexities]
                 }
                 
                 with open(args.output_file, 'w') as f:
                     json.dump(results, f, indent=2)
                 print(f"Results saved to {args.output_file}\n")
+            
+            # Generate sample texts to verify model quality
+            print("\n" + "="*80)
+            print("SAMPLE GENERATION TEST")
+            print("="*80)
+            
+            # Reuse model if already loaded from WikiText eval, otherwise load it
+            try:
+                if 'model' not in locals() or 'tokenizer' not in locals():
+                    print("Loading model for generation...")
+                    import torch
+                    from transformers import AutoModelForCausalLM, AutoTokenizer
+                    
+                    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, use_fast=False)
+                    if tokenizer.pad_token is None:
+                        tokenizer.pad_token = tokenizer.eos_token
+                    
+                    model = AutoModelForCausalLM.from_pretrained(
+                        args.model,
+                        torch_dtype=torch.bfloat16,
+                        device_map="auto"
+                    )
+                    model.eval()
+                else:
+                    print("Using already loaded model...")
+            except:
+                print("Loading model for generation...")
+                import torch
+                from transformers import AutoModelForCausalLM, AutoTokenizer
+                
+                tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, use_fast=False)
+                if tokenizer.pad_token is None:
+                    tokenizer.pad_token = tokenizer.eos_token
+                
+                model = AutoModelForCausalLM.from_pretrained(
+                    args.model,
+                    torch_dtype=torch.bfloat16,
+                    device_map="auto"
+                )
+                model.eval()
+            
+            # Test prompts
+            test_prompts = [
+                "Once upon a time",
+                "Harry Potter was a wizard who",
+                "The capital of France is",
+                "In the year 2024",
+                "Hermione Granger was known for her"
+            ]
+            
+            for i, prompt in enumerate(test_prompts, 1):
+                inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+                with torch.no_grad():
+                    outputs = model.generate(
+                        **inputs,
+                        max_new_tokens=30,
+                        do_sample=True,
+                        temperature=0.7,
+                        top_p=0.9,
+                        pad_token_id=tokenizer.eos_token_id
+                    )
+                generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+                continuation = generated_text[len(prompt):].strip()
+                print(f"\n{i}. Prompt: '{prompt}'")
+                print(f"   Generated: {continuation}")
+            
+            print("\n" + "="*80)
+            print("All tests completed!")
+            print("="*80 + "\n")
 
 if __name__ == "__main__":
     main()
