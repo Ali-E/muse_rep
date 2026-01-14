@@ -14,17 +14,18 @@ MAX_LEN=2048
 EPOCHS=1
 LR='1e-5'
 # LR='1e-3'
-PER_DEVICE_BATCH_SIZE=4  # Reduced from 8 to 2, with gradient_accumulation_steps=4 effective batch is 2*4*4=32
+PER_DEVICE_BATCH_SIZE=2  # Reduced from 8 to 2, with gradient_accumulation_steps=4 effective batch is 2*4*4=32
 FT_EPOCHS=1
 FT_LR='1e-5'
+GRAD_STEPS=4
 
 SEED=1
 
 
 # algo_list=('npo' 'npo_gdr' 'npo_klr')
 # algo_list=('rmu' 'npo_klr' 'simnpo')
-# algo_list=('npo_gdr')
-algo_list=('rmu')
+algo_list=('npo_gdr')
+# algo_list=('rmu')
 # algo_list=('npo' 'npo_gdr')
 # forget_portion_list=(0.75 1.0)
 # forget_portion_list=(0.05 0.1 0.25 0.5)
@@ -32,7 +33,7 @@ algo_list=('rmu')
 # forget_portion_list=(0.05 0.1 0.25 0.5 0.75 1.0)
 forget_portion_list=(0.05 0.1 0.25 0.5 1.0)
 # forget_portion_list=(0.25 0.5)
-# forget_portion_list=(1.0)
+# forget_portion_list=(0.00.1)
 
 
 for algo in "${algo_list[@]}"; do
@@ -50,7 +51,7 @@ for algo in "${algo_list[@]}"; do
             # out_dir="./ckpt/$CORPUS/${algo}_${forget_portion}_PS"
             # out_dir="./Llama2_ft/ckpt/$CORPUS/${algo}_${forget_portion}"
         fi
-        CUDA_VISIBLE_DEVICES=1,3 python unlearn.py \
+        CUDA_VISIBLE_DEVICES=0,2 python unlearn.py \
             --algo $algo \
             --model_dir $TARGET_DIR --tokenizer_dir $LLAMA_DIR \
             --data_file $FORGET --retain_data_file $RETAIN \
@@ -61,10 +62,12 @@ for algo in "${algo_list[@]}"; do
             --seed $SEED \
             --use_wikitext --wikitext_coeff 0.1 \
             --retain_coeff 0.9 \
+            --gradient_accumulation_steps $GRAD_STEPS \
             --scale_retain_with_forget_portion \
             --retain_data_file ../data/books/raw/retain1.txt \
-            # --auto_upsample \
             # --use_wikitext
             # --ps_file ckpt/books/ps_agg_llama_all.csv
     done
 done
+
+            // --auto_upsample \

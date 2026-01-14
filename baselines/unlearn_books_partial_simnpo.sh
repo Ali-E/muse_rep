@@ -39,17 +39,17 @@ forget_portion_list=(0.1)
 # forget_portion_list=(1.0)
 
 
-beta_vals=(2.0 2.5)
-gamma_vals=(0.3)
+beta_vals=(3.0 4.0)
+gamma_vals=(0.1 0.05)
 
 
-for beta in "${beta_vals[@]}"; do
-    for gamma in "${gamma_vals[@]}"; do
+for gamma in "${gamma_vals[@]}"; do
+    for beta in "${beta_vals[@]}"; do
         for forget_portion in "${forget_portion_list[@]}"; do
-            out_dir="./Llama2_ft_mine/ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_U_s${SEED}"
+            out_dir="./Llama2_ft_mine/ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_UW_s${SEED}"
             # out_dir="./ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_s${SEED}"
             if [ "$forget_portion" == "1.0" ]; then
-                out_dir="./Llama2_ft_mine/ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_U_s${SEED}"
+                out_dir="./Llama2_ft_mine/ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_UW_s${SEED}"
                 # out_dir="./ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_s${SEED}"
             fi
             CUDA_VISIBLE_DEVICES=0,2 python unlearn.py \
@@ -64,7 +64,9 @@ for beta in "${beta_vals[@]}"; do
                 --auto_upsample \
                 --beta $beta \
                 --gamma $gamma \
-                --save_only_final
+                --save_only_final \
+                --use_wikitext --wikitext_coeff 0.1 \
+                --retain_coeff 0.9
         done
     done
 done

@@ -38,6 +38,7 @@ def unlearn(
     retain_coeff: float = 1.0,
     retain_portion: float | None = None,
     save_only_final: bool = False,
+    gradient_accumulation_steps: int = 4,
 ):
     if 'gd' in loss_type:
         assert retain_data_file is not None or use_wikitext, "Retain data must be specified for grad_diff (either retain_data_file or use_wikitext)."
@@ -99,7 +100,7 @@ def unlearn(
     training_args = transformers.TrainingArguments(
         output_dir=out_dir,
         per_device_train_batch_size=per_device_batch_size,
-        gradient_accumulation_steps=2,  # Effective batch size = per_device_batch_size * num_gpus * grad_accum_steps
+        gradient_accumulation_steps=gradient_accumulation_steps,  # Effective batch size = per_device_batch_size * num_gpus * grad_accum_steps
         learning_rate=learning_rate,
         save_strategy='no' if save_only_final else 'epoch',  # Save only at end or every epoch
         num_train_epochs=epochs,

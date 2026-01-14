@@ -43,7 +43,7 @@ def main():
     
     elif 'gdr' in args.algo:
         print("Using Gradient Difference hyperparameters for Books dataset from the paper:")
-        # args.lr = 5e-6
+        args.lr = 5e-6
         # args.beta = 0.5
         print(f"lr={args.lr}, epochs={args.epochs}, beta={args.beta}")
     
@@ -52,6 +52,19 @@ def main():
         args.epochs = 1
         args.lr = 0.0001 # e-4
         print(f"  lr={args.lr}, epochs={args.epochs}")
+
+    # Scale WikiText samples if scale_retain_with_forget_portion is set
+    if args.scale_retain_with_forget_portion and args.use_wikitext and args.forget_portion < 1.0:
+        if args.wikitext_max_samples is None:
+            # If no max samples specified, use a default base (e.g., 1000) and scale it
+            base_wikitext_samples = 1000
+            args.wikitext_max_samples = int(base_wikitext_samples * args.forget_portion)
+            print(f"Auto-scaling WikiText samples: {args.wikitext_max_samples} (portion={args.forget_portion})")
+        else:
+            # If max samples was specified, scale it by the forget portion
+            original_samples = args.wikitext_max_samples
+            args.wikitext_max_samples = int(args.wikitext_max_samples * args.forget_portion)
+            print(f"Scaling WikiText samples: {original_samples} -> {args.wikitext_max_samples} (portion={args.forget_portion})")
 
     if args.algo == 'kn':
         raise NotImplementedError()
@@ -82,7 +95,7 @@ def main():
 
     elif args.algo == 'rmu':
         # Determine retain_portion based on flags
-        retain_portion = args.forget_portion if (args.scale_retain_with_forget_portion and not args.auto_upsample and not args.use_wikitext) else None
+        retain_portion = args.forget_portion if (args.scale_retain_with_forget_portion and not args.auto_upsample) else None
         rmu_unlearn(
             args.model_dir, args.data_file, args.out_dir,
             retain_data_file=args.retain_data_file,
@@ -108,7 +121,7 @@ def main():
 
     else:
         # Determine retain_portion based on flags
-        retain_portion = args.forget_portion if (args.scale_retain_with_forget_portion and not args.auto_upsample and not args.use_wikitext) else None
+        retain_portion = args.forget_portion if (args.scale_retain_with_forget_portion and not args.auto_upsample) else None
         it_unlearn(
             args.model_dir, args.data_file, args.out_dir,
             retain_data_file=args.retain_data_file,
@@ -138,7 +151,8 @@ def main():
             wikitext_coeff=args.wikitext_coeff,
             retain_coeff=args.retain_coeff,
             retain_portion=retain_portion,
-            save_only_final=args.save_only_final
+            save_only_final=args.save_only_final,
+            gradient_accumulation_steps=args.gradient_accumulation_steps
         )
 
     return;
@@ -245,6 +259,10 @@ def get_args():
     parser.add_argument(
         '--save_only_final', action='store_true',
         help="If set, save only the final model instead of checkpoints after each epoch."
+    )
+    parser.add_argument(
+        '--gradient_accumulation_steps', type=int, default=4,
+        help="Number of gradient accumulation steps for training. Effective batch size = per_device_batch_size * num_gpus * gradient_accumulation_steps."
     )
 
     # Task vector
