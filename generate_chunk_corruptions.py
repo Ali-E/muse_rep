@@ -275,10 +275,18 @@ def sample_subsequences(
     text: str,
     seq_length: int,
     num_seqs: int,
+    min_seq_length_ratio: float = 1.0,
 ) -> List[Dict]:
     """
     Sample non-overlapping token subsequences starting at sentence boundaries.
     Returns list of dicts with 'question' (first half) and 'answer' (second half).
+    
+    Args:
+        model: The language model
+        text: Input text to sample from
+        seq_length: Target length of token subsequences
+        num_seqs: Number of subsequences to sample
+        min_seq_length_ratio: Minimum length as ratio of seq_length (e.g., 0.8 for 80%)
     """
     # Get sentence start positions
     sentence_starts = find_sentence_starts(text, model.tokenizer)
@@ -286,15 +294,18 @@ def sample_subsequences(
     # Tokenize full text
     full_tokens = model.to_tokens(text, prepend_bos=False)[0]  # [T]
     
-    if len(full_tokens) < seq_length:
+    # Calculate minimum acceptable length
+    min_length = int(seq_length * min_seq_length_ratio)
+    
+    if len(full_tokens) < min_length:
         return []
     
-    # Find valid starting positions (sentence starts with enough room)
-    valid_starts = [s for s in sentence_starts if s + seq_length <= len(full_tokens)]
+    # Find valid starting positions (sentence starts with enough room for at least min_length)
+    valid_starts = [s for s in sentence_starts if s + min_length <= len(full_tokens)]
     
     if len(valid_starts) == 0:
         # Fallback: use any position if no sentence starts work
-        valid_starts = list(range(0, len(full_tokens) - seq_length + 1, seq_length))
+        valid_starts = list(range(0, len(full_tokens) - min_length + 1, seq_length))
     
     # Sample non-overlapping subsequences
     sampled = []
@@ -312,7 +323,9 @@ def sample_subsequences(
         # Pick a random start
         import random
         start_idx = random.choice(valid_starts)
-        end_idx = start_idx + seq_length
+        # Use seq_length if available, otherwise use remaining tokens
+        actual_length = min(seq_length, len(full_tokens) - start_idx)
+        end_idx = start_idx + actual_length
         
         # Check for overlap with already sampled ranges
         overlaps = False
@@ -329,7 +342,7 @@ def sample_subsequences(
         subseq_text = model.tokenizer.decode(subseq_tokens.tolist())
         
         # Split into question (first half) and answer (second half)
-        half = seq_length // 2
+        half = actual_length // 2
         question_tokens = subseq_tokens[:half]
         answer_tokens = subseq_tokens[half:]
         
@@ -433,6 +446,7 @@ def process_chunk(
         text=text,
         seq_length=args.seq_length,
         num_seqs=args.num_seqs_per_chunk,
+        min_seq_length_ratio=args.min_seq_length_ratio,
     )
     
     if len(subseqs) == 0:
@@ -521,6 +535,8 @@ def main():
     # Subsequence sampling
     ap.add_argument("--seq_length", type=int, default=40, help="Length of token subsequences")
     ap.add_argument("--num_seqs_per_chunk", type=int, default=5, help="Number of subsequences per chunk")
+    ap.add_argument("--min_seq_length_ratio", type=float, default=1.0, 
+                    help="Minimum sequence length as ratio of seq_length (e.g., 0.8 for 80%%). Allows shorter sequences at sentence boundaries.")
 
     # Corruption hyperparams
     ap.add_argument("--top_k", type=int, default=40, help="Top-k alternatives per position")

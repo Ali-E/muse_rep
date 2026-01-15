@@ -7,7 +7,7 @@ CSV_INPUT="data/books/raw/forget_chunks.csv"
 OUTPUT_DIR="corruptions"
 
 # Corruption parameters
-SEQ_LENGTH=40
+SEQ_LENGTH=80
 NUM_SEQS_PER_CHUNK=5
 TOP_K=40
 MAX_PER_POS=10
@@ -15,13 +15,14 @@ MAX_TOTAL=20
 FLUENCY_TAU=0.8
 MIN_EFFECT_DROP=0.08
 MAX_CORRUPTIONS_PER_SEQ=20
+min_seq_length_ratio=0.5
 
 # Optional: Limit number of input rows to process (set to 0 or leave empty to process all)
-LIMIT=0
+LIMIT=50
 
 # Number of GPUs to use
-NUM_GPUS=4
-GPU_IDS=(0 1 2 3)  # Adjust based on your available GPUs
+NUM_GPUS=2
+GPU_IDS=(2 3)  # Adjust based on your available GPUs
 
 # Create output directory
 mkdir -p $OUTPUT_DIR
@@ -91,6 +92,7 @@ for i in $(seq 0 $(($NUM_GPUS - 1))); do
             --max_corruptions_per_seq $MAX_CORRUPTIONS_PER_SEQ \
             --only_content_words \
             --clean_unicode \
+            --min_seq_length_ratio $min_seq_length_ratio \
             > ${OUTPUT_DIR}/log_gpu_${i}.txt 2>&1 &
         
         pids+=($!)
