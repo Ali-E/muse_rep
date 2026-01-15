@@ -296,8 +296,10 @@ def sample_subsequences(
     # Tokenize full text
     full_tokens = model.to_tokens(text, prepend_bos=False)[0]  # [T]
     
-    # Calculate minimum acceptable length
-    min_length = int(seq_length * min_seq_length_ratio)
+    # Calculate fixed answer length and minimum total length
+    fixed_answer_length = int((seq_length * min_seq_length_ratio) / 2)
+    # Minimum length = fixed_answer_length for question + fixed_answer_length for answer
+    min_length = 2 * fixed_answer_length
     
     if len(full_tokens) < min_length:
         return []
@@ -346,9 +348,9 @@ def sample_subsequences(
         # Split into question and answer:
         # - Answer portion is FIXED at (seq_length * min_seq_length_ratio) / 2
         # - Question portion is variable (takes remaining tokens)
-        fixed_answer_length = int((seq_length * min_seq_length_ratio) / 2)
-        question_tokens = subseq_tokens[:-fixed_answer_length] if actual_length > fixed_answer_length else subseq_tokens[:1]
-        answer_tokens = subseq_tokens[-fixed_answer_length:] if actual_length >= fixed_answer_length else subseq_tokens[1:]
+        # Note: We guaranteed min_length ensures we have enough for fixed_answer_length
+        question_tokens = subseq_tokens[:-fixed_answer_length]
+        answer_tokens = subseq_tokens[-fixed_answer_length:]
         
         question_text = model.tokenizer.decode(question_tokens.tolist())
         answer_text = model.tokenizer.decode(answer_tokens.tolist())
