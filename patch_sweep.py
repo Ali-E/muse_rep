@@ -217,8 +217,8 @@ def sweep_sites_with_pns(
                 hook_name = f"blocks.{L}.attn.hook_result"
                 eval_site(hook_name, H, "attn_head", L, H)
 
-    # sort by restoration (primary) then PNS (tie-breaker)
-    results.sort(key=lambda r: (r["restoration"], r["pns"]), reverse=True)
+    # sort by fraction_restored (primary) then PNS (tie-breaker)
+    results.sort(key=lambda r: (r["fraction_restored"], r["pns"]), reverse=True)
     return results
 
 def save_top_site_activation(
@@ -228,6 +228,8 @@ def save_top_site_activation(
     pos_clean: List[int],
     out_tensor_path: str,
     out_meta_path: str,
+    corruption_info: Optional[Dict] = None,
+    restoration_info: Optional[Dict] = None,
 ):
     """
     Persist the clean activation slice for the top (restoring) site.
@@ -266,6 +268,10 @@ def save_top_site_activation(
         "tensor_shape": list(act_slice.shape),
         "notes": "Clean-run activations at answer-predicting positions for the top-restoring site.",
     }
+    if corruption_info is not None:
+        meta["corruption"] = corruption_info
+    if restoration_info is not None:
+        meta["restoration"] = restoration_info
     with open(out_meta_path, "w") as f:
         json.dump(meta, f, indent=2)
 

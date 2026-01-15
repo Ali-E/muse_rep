@@ -136,7 +136,17 @@ def main():
                     help="Ablation mode used during site sweep (default: zero)")
     ap.add_argument("--chunk_format", action="store_true",
                     help="Use format from generate_chunk_corruptions.py (no blanks in questions)")
+    ap.add_argument("--sweep_attn_heads", action="store_true",
+                    help="Include attention heads in site sweep")
+    ap.add_argument("--no_sweep_mlp", action="store_true",
+                    help="Exclude MLP layers from site sweep")
+    ap.add_argument("--no_sweep_resid", action="store_true",
+                    help="Exclude residual streams from site sweep")
     args = ap.parse_args()
+    
+    # Set sweep flags (default True for mlp and resid, False for attn_heads)
+    args.sweep_mlp = not args.no_sweep_mlp
+    args.sweep_resid = not args.no_sweep_resid
 
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
     model = load_model(args.model, args.tokenizer, device)
@@ -159,7 +169,7 @@ def main():
     if args.ids:
         wanted = set([s.strip() for s in args.ids.split(",") if s.strip() != ""])
         id_order = [i for i in id_order if i in wanted]
-    elif args.limit is not None:
+    elif args.limit is not None and args.limit > 0:
         id_order = id_order[: args.limit]
 
     by_id: Dict[str, List[Dict[str, str]]] = {}
@@ -210,9 +220,9 @@ def main():
             clean_question=clean_q,
             corrupted_question=corr_q,
             answer=answer,
-            sweep_attn_heads=True,
-            sweep_mlp=True,
-            sweep_resid=True,
+            sweep_attn_heads=args.sweep_attn_heads,
+            sweep_mlp=args.sweep_mlp,
+            sweep_resid=args.sweep_resid,
             head_subsample=None,
             ablation_mode=args.ablation,
         )
@@ -221,12 +231,34 @@ def main():
         top = results[0]
         pos_clean = answer_pred_positions(model, pref_c, answer)
 
+        # Extract corruption metadata and restoration metrics
+        corruption_info = {
+            "position": best.get("position", ""),
+            "orig_token": best.get("orig_token", ""),
+            "alt_token": best.get("alt_token", ""),
+            "delta_from_clean": best.get("delta_from_clean", ""),
+        }
+        
+        # Add restoration metrics from patching
+        restoration_info = {
+            "clean_avg_lp": top["clean_avg_lp"],
+            "corr_avg_lp": top["corr_avg_lp"],
+            "patched_avg_lp": top["patched_avg_lp"],
+            "restoration": top["restoration"],
+            "fraction_restored": top["fraction_restored"],
+            "pns": top["pns"],
+            "p_on": top["p_on"],
+            "p_off": top["p_off"],
+        }
+        
         tensor_path = os.path.join(out_root, f"{sid}_top_site_act.pt")
         meta_path = os.path.join(out_root, f"{sid}_top_site_meta.json")
         save_top_site_activation(
             model, clean_cache, top, pos_clean,
             out_tensor_path=tensor_path,
             out_meta_path=meta_path,
+            corruption_info=corruption_info,
+            restoration_info=restoration_info,
         )
         out_samples.append({
             "sample_id": sid,

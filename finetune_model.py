@@ -37,16 +37,55 @@ from transformers import (
 )
 
 
-def load_data_files(file_paths: List[str]) -> Dataset:
+def load_tofu_dataset(split: str = "train", subset: str = "full") -> Dataset:
     """
-    Load and concatenate multiple text or JSON files into a single dataset.
+    Load TOFU dataset from HuggingFace Hub.
     
     Args:
-        file_paths: List of paths to .txt or .json files
+        split: Dataset split ("train", "validation", "test")
+        subset: TOFU subset ("full", "forget01", "forget05", "forget10", etc.)
+        
+    Returns:
+        HuggingFace Dataset with 'text' column formatted as Q&A pairs
+    """
+    print(f"Loading TOFU dataset (subset={subset}, split={split})...")
+    
+    # Load from HuggingFace Hub
+    # TOFU dataset: locuslab/TOFU
+    ds = load_dataset("locuslab/TOFU", subset, split=split)
+    
+    # Format as Q&A pairs
+    def format_tofu_example(example):
+        question = example.get("question", "")
+        answer = example.get("answer", "")
+        
+        # Format as "Question: ... Answer: ..." for causal LM training
+        text = f"Question: {question}\nAnswer: {answer}"
+        return {"text": text}
+    
+    formatted_ds = ds.map(format_tofu_example, remove_columns=ds.column_names)
+    
+    print(f"Loaded {len(formatted_ds)} examples from TOFU dataset")
+    return formatted_ds
+
+
+def load_data_files(file_paths: List[str], use_tofu: bool = False, tofu_subset: str = "full", tofu_split: str = "train") -> Dataset:
+    """
+    Load and concatenate multiple text or JSON files into a single dataset.
+    Optionally load TOFU dataset from HuggingFace Hub.
+    
+    Args:
+        file_paths: List of paths to .txt or .json files (ignored if use_tofu=True)
+        use_tofu: If True, load TOFU dataset instead of files
+        tofu_subset: TOFU subset ("full", "forget01", "forget05", "forget10")
+        tofu_split: TOFU split ("train", "validation", "test")
         
     Returns:
         Combined HuggingFace Dataset with 'text' column
     """
+    if use_tofu:
+        return load_tofu_dataset(split=tofu_split, subset=tofu_subset)
+    
     datasets = []
     
     for path in file_paths:
@@ -89,6 +128,9 @@ def finetune(
     save_strategy: str = "epoch",
     logging_steps: int = 50,
     bf16: bool = True,
+    use_tofu: bool = False,
+    tofu_subset: str = "full",
+    tofu_split: str = "train",
 ):
     """
     Fine-tune a causal language model on custom data.
@@ -125,8 +167,11 @@ def finetune(
     )
     
     # Load and prepare data
-    print(f"Loading data from {len(data_files)} file(s)")
-    dataset = load_data_files(data_files)
+    if use_tofu:
+        print(f"Loading TOFU dataset (subset={tofu_subset}, split={tofu_split})")
+    else:
+        print(f"Loading data from {len(data_files)} file(s)")
+    dataset = load_data_files(data_files, use_tofu=use_tofu, tofu_subset=tofu_subset, tofu_split=tofu_split)
     print(f"Total examples: {len(dataset)}")
     
     # Tokenization function
@@ -232,14 +277,34 @@ def main():
         "--data_files",
         type=str,
         nargs="+",
-        required=True,
-        help="One or more data files (.txt or .json) to fine-tune on"
+        default=[],
+        help="One or more data files (.txt or .json) to fine-tune on (not needed if using --tofu)"
     )
     parser.add_argument(
         "--out_dir",
         type=str,
         required=True,
         help="Output directory to save the fine-tuned model"
+    )
+    
+    # TOFU dataset options
+    parser.add_argument(
+        "--tofu",
+        action="store_true",
+        help="Use TOFU dataset from HuggingFace Hub instead of local files"
+    )
+    parser.add_argument(
+        "--tofu_subset",
+        type=str,
+        default="full",
+        help="TOFU subset to use (default: 'full', options: 'forget01', 'forget05', 'forget10', etc.)"
+    )
+    parser.add_argument(
+        "--tofu_split",
+        type=str,
+        default="train",
+        choices=["train", "validation", "test"],
+        help="TOFU split to use (default: 'train')"
     )
     
     # Optional hyperparameters (defaults from MUSE paper)
@@ -306,6 +371,10 @@ def main():
     
     args = parser.parse_args()
     
+    # Validate arguments
+    if not args.tofu and not args.data_files:
+        parser.error("Either --data_files or --tofu must be specified")
+    
     # Fine-tune
     finetune(
         model_path=args.model,
@@ -322,6 +391,9 @@ def main():
         save_strategy=args.save_strategy,
         logging_steps=args.logging_steps,
         bf16=not args.no_bf16,
+        use_tofu=args.tofu,
+        tofu_subset=args.tofu_subset,
+        tofu_split=args.tofu_split,
     )
 
 

@@ -14,7 +14,7 @@ LIMIT=0
 
 # Number of GPUs to use
 NUM_GPUS=2
-GPU_IDS=(2 3)  # Adjust based on your available GPUs
+GPU_IDS=(1 3)  # Adjust based on your available GPUs
 
 # Create output directory
 mkdir -p $OUTPUT_DIR
