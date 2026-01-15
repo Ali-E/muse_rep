@@ -7,7 +7,7 @@ CSV_INPUT="data/books/raw/forget_chunks.csv"
 OUTPUT_DIR="corruptions"
 
 # Corruption parameters
-SEQ_LENGTH=80
+SEQ_LENGTH=100
 NUM_SEQS_PER_CHUNK=5
 TOP_K=40
 MAX_PER_POS=10
@@ -18,7 +18,7 @@ MAX_CORRUPTIONS_PER_SEQ=20
 min_seq_length_ratio=0.5
 
 # Optional: Limit number of input rows to process (set to 0 or leave empty to process all)
-LIMIT=50
+LIMIT=20
 
 # Number of GPUs to use
 NUM_GPUS=2

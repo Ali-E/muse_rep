@@ -279,14 +279,16 @@ def sample_subsequences(
 ) -> List[Dict]:
     """
     Sample non-overlapping token subsequences starting at sentence boundaries.
-    Returns list of dicts with 'question' (first half) and 'answer' (second half).
+    Returns list of dicts with 'question' (variable length) and 'answer' (fixed length).
     
     Args:
         model: The language model
         text: Input text to sample from
         seq_length: Target length of token subsequences
         num_seqs: Number of subsequences to sample
-        min_seq_length_ratio: Minimum length as ratio of seq_length (e.g., 0.8 for 80%)
+        min_seq_length_ratio: Minimum length as ratio of seq_length (e.g., 0.5 for 50%).
+                             Answer portion is fixed at (seq_length * min_seq_length_ratio) / 2.
+                             Question portion takes the remaining tokens.
     """
     # Get sentence start positions
     sentence_starts = find_sentence_starts(text, model.tokenizer)
@@ -341,10 +343,12 @@ def sample_subsequences(
         subseq_tokens = full_tokens[start_idx:end_idx]
         subseq_text = model.tokenizer.decode(subseq_tokens.tolist())
         
-        # Split into question (first half) and answer (second half)
-        half = actual_length // 2
-        question_tokens = subseq_tokens[:half]
-        answer_tokens = subseq_tokens[half:]
+        # Split into question and answer:
+        # - Answer portion is FIXED at (seq_length * min_seq_length_ratio) / 2
+        # - Question portion is variable (takes remaining tokens)
+        fixed_answer_length = int((seq_length * min_seq_length_ratio) / 2)
+        question_tokens = subseq_tokens[:-fixed_answer_length] if actual_length > fixed_answer_length else subseq_tokens[:1]
+        answer_tokens = subseq_tokens[-fixed_answer_length:] if actual_length >= fixed_answer_length else subseq_tokens[1:]
         
         question_text = model.tokenizer.decode(question_tokens.tolist())
         answer_text = model.tokenizer.decode(answer_tokens.tolist())
