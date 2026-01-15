@@ -5,6 +5,7 @@ import re
 from typing import Dict, List, Optional, Tuple
 
 import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
 from transformer_lens import HookedTransformer
 from tqdm import tqdm
 
@@ -17,6 +18,65 @@ from patch_sweep import (
     answer_pred_positions,
     save_top_site_activation,
 )
+
+
+def load_model(model_name: str, tokenizer_name: Optional[str] = None, device: Optional[str] = None):
+    """Load model, supporting both local finetuned models and HuggingFace models."""
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    if tokenizer_name is None:
+        tokenizer_name = model_name
+    
+    # Load tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, use_fast=False)
+    
+    # Check if model_name is a local path
+    if os.path.exists(model_name):
+        print(f"Loading model from local path: {model_name}")
+        
+        # Load HuggingFace model first
+        hf_model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch.bfloat16,
+            device_map='auto'
+        )
+        
+        # Determine the official model name for HookedTransformer
+        config_path = os.path.join(model_name, "config.json")
+        official_name = "meta-llama/Llama-2-7b-hf"  # default
+        
+        if os.path.exists(config_path):
+            import json
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            
+            # Infer official model name from config
+            if config.get("model_type") == "llama":
+                hidden_size = config.get("hidden_size", 4096)
+                num_layers = config.get("num_hidden_layers", 32)
+                
+                if hidden_size == 4096 and num_layers == 32:
+                    official_name = "meta-llama/Llama-2-7b-hf"
+                elif hidden_size == 5120 and num_layers == 40:
+                    official_name = "meta-llama/Llama-2-13b-hf"
+        
+        print(f"Wrapping with HookedTransformer using architecture: {official_name}")
+        
+        # Wrap with HookedTransformer
+        model = HookedTransformer.from_pretrained(
+            official_name,
+            hf_model=hf_model,
+            tokenizer=tokenizer,
+            fold_ln=False,
+            center_writing_weights=False,
+            center_unembed=False,
+        )
+    else:
+        # Load from HuggingFace Hub or official model name
+        print(f"Loading model from HuggingFace: {model_name}")
+        model = HookedTransformer.from_pretrained(model_name, tokenizer=tokenizer, device=device)
+    
+    return model
 
 
 def _sanitize_model_tag(model_name: str) -> str:
@@ -40,6 +100,8 @@ def unique_ids(rows: List[Dict[str, str]]) -> List[str]:
 
 
 def pick_clean_and_best_corr(rows: List[Dict[str, str]]) -> Tuple[Dict[str, str], Optional[Dict[str, str]]]:
+    """Pick clean baseline and best corruption from rows.
+    Works with both generate_corruptions.py and generate_chunk_corruptions.py output."""
     clean = None
     for r in rows:
         if r.get("corruption") == "none":
@@ -66,19 +128,34 @@ def main():
     ap.add_argument("--corruptions_csv", required=True)
     ap.add_argument("--out_dir", required=True)
     ap.add_argument("--model", required=True)
+    ap.add_argument("--tokenizer", default=None, help="Tokenizer to use (defaults to model)")
     ap.add_argument("--device", default=None)
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--ids", default=None)
     ap.add_argument("--ablation", choices=["zero", "mean"], default="zero",
                     help="Ablation mode used during site sweep (default: zero)")
+    ap.add_argument("--chunk_format", action="store_true",
+                    help="Use format from generate_chunk_corruptions.py (no blanks in questions)")
     args = ap.parse_args()
 
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
-    model = HookedTransformer.from_pretrained(args.model, device=device)
+    model = load_model(args.model, args.tokenizer, device)
     model_tag = _sanitize_model_tag(args.model)
 
     rows = load_csv(args.corruptions_csv)
-    id_order = unique_ids(rows)
+    
+    # Determine ID field based on format
+    id_field = "chunk_id" if args.chunk_format else "id"
+    
+    # Get unique IDs
+    id_order = []
+    seen = set()
+    for r in rows:
+        i = str(r.get(id_field, ""))
+        if i and i not in seen:
+            seen.add(i)
+            id_order.append(i)
+    
     if args.ids:
         wanted = set([s.strip() for s in args.ids.split(",") if s.strip() != ""])
         id_order = [i for i in id_order if i in wanted]
@@ -87,7 +164,7 @@ def main():
 
     by_id: Dict[str, List[Dict[str, str]]] = {}
     for r in rows:
-        i = str(r.get("id", ""))
+        i = str(r.get(id_field, ""))
         if i in id_order:
             by_id.setdefault(i, []).append(r)
 
@@ -103,12 +180,27 @@ def main():
         if best is None:
             continue
 
-        clean_q = clean.get("question_out") or clean.get("question") or ""
-        corr_q = best.get("question_out") or best.get("question") or ""
-        answer = clean.get("answer", "")
+        # Get question and answer based on format
+        if args.chunk_format:
+            # generate_chunk_corruptions.py format: no blanks, just question + answer
+            clean_q = clean.get("question", "")
+            corr_q = best.get("question", "")
+            answer = clean.get("answer", "")
+            
+            # For chunk format, we concatenate question + answer as full sequence
+            full_clean = clean_q + answer
+            # Use empty prefix and suffix for answer_pred_positions
+            pref_c = clean_q
+            suff_c = ""
+        else:
+            # generate_corruptions.py format: question has blanks (___)
+            clean_q = clean.get("question_out") or clean.get("question") or ""
+            corr_q = best.get("question_out") or best.get("question") or ""
+            answer = clean.get("answer", "")
+            
+            pref_c, suff_c = split_blank(clean_q)
+            full_clean = pref_c + answer + suff_c
 
-        pref_c, suff_c = split_blank(clean_q)
-        full_clean = pref_c + answer + suff_c
         toks_clean = model.to_tokens(full_clean, prepend_bos=True)
         with torch.no_grad():
             _, clean_cache = model.run_with_cache(toks_clean)
