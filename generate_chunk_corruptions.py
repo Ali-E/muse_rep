@@ -20,6 +20,7 @@ Usage:
 
 import argparse, csv, math, os, re, sys
 from typing import List, Dict, Tuple, Optional
+import unicodedata
 
 import torch
 from transformer_lens import HookedTransformer
@@ -79,6 +80,42 @@ def is_content_word(token_str: str) -> bool:
         return True
     
     return False
+
+def clean_invisible_unicode(text: str) -> str:
+    """
+    Remove invisible Unicode characters that can cause issues.
+    Keeps visible text, spaces, and common formatting.
+    
+    Args:
+        text: Input text potentially containing invisible Unicode
+        
+    Returns:
+        Cleaned text with invisible characters removed
+    """
+    # Characters to remove:
+    # - Zero-width characters (ZWSP, ZWNJ, ZWJ, etc.)
+    # - Bidirectional text markers
+    # - Format characters
+    # - Other invisible/control characters
+    
+    cleaned = []
+    for char in text:
+        category = unicodedata.category(char)
+        # Keep:
+        # - Letters (L*), Marks (M*), Numbers (N*), Punctuation (P*), Symbols (S*)
+        # - Space separator (Zs)
+        # - Line/paragraph separators converted to space
+        # Remove:
+        # - Format (Cf), Control (Cc except tab/newline), Other (Co, Cn)
+        if category.startswith(('L', 'M', 'N', 'P', 'S')):
+            cleaned.append(char)
+        elif category == 'Zs' or char in ' \t\n\r':
+            cleaned.append(char)
+        elif category in ('Zl', 'Zp'):  # Line/paragraph separators
+            cleaned.append(' ')
+        # Skip format and control characters (invisible)
+        
+    return ''.join(cleaned)
 
 def load_model(model_name: str, tokenizer_name: Optional[str] = None, device: Optional[str] = None):
     if device is None:
@@ -176,6 +213,38 @@ def avg_nll(model: HookedTransformer, text: str) -> float:
     tgt = toks[0, 1:]
     lp = logprobs[0, :-1, :].gather(-1, tgt[:, None]).squeeze(-1)
     return float((-lp.mean()).item())
+
+def generate_answer_section(
+    model: HookedTransformer,
+    question: str,
+    target_length: int,
+) -> str:
+    """
+    Generate an answer section of specific token length given a question prefix.
+    Uses greedy decoding.
+    
+    Args:
+        model: The language model
+        question: The question/prefix text
+        target_length: Number of tokens to generate
+        
+    Returns:
+        Generated text as string
+    """
+    device = model.cfg.device
+    toks = model.to_tokens(question, prepend_bos=True).to(device)
+    
+    generated_ids = []
+    with torch.no_grad():
+        for _ in range(target_length):
+            logits = model(toks)
+            next_token = logits[0, -1].argmax(dim=-1, keepdim=True)
+            generated_ids.append(int(next_token.item()))
+            toks = torch.cat([toks, next_token.unsqueeze(0)], dim=1)
+    
+    # Decode generated tokens
+    generated_text = model.tokenizer.decode(generated_ids)
+    return generated_text
 
 def find_sentence_starts(text: str, tokenizer) -> List[int]:
     """
@@ -393,6 +462,7 @@ def process_chunk(
             "avg_logprob": base_avg_lp,
             "delta_from_clean": 0.0,
             "prompt_avg_nll_increase": 0.0,
+            "generated_answer": "",
         })
         
         # Find corruptions that INCREASE answer log-prob
@@ -411,6 +481,12 @@ def process_chunk(
         for p in props:
             avg_lp = seq_avg_logprob(model, p["new_question"], answer)
             
+            # Optionally generate new answer section
+            generated_answer = ""
+            if args.generate_new_answer:
+                answer_length = len(subseq['answer_tokens'])
+                generated_answer = generate_answer_section(model, p["new_question"], answer_length)
+            
             scored.append({
                 "chunk_id": chunk_id,
                 "seq_idx": seq_idx,
@@ -424,6 +500,7 @@ def process_chunk(
                 "avg_logprob": avg_lp,
                 "delta_from_clean": avg_lp - base_avg_lp,  # negative = worse for answer
                 "prompt_avg_nll_increase": p["nll_increase"],
+                "generated_answer": generated_answer,
             })
         
         # Keep only those that DECREASE the metric by >= min_effect_drop
@@ -456,6 +533,10 @@ def main():
                     help="Max number of corruptions to keep per subsequence (top k by largest drop)")
     ap.add_argument("--only_content_words", action='store_true', 
                     help="Only corrupt content words (skip function words, punctuation, numbers)")
+    ap.add_argument("--generate_new_answer", action='store_true',
+                    help="Generate new answer section (same length) for each corruption")
+    ap.add_argument("--clean_unicode", action='store_true',
+                    help="Remove invisible Unicode characters from input text")
 
     ap.add_argument("--limit", type=int, default=None, help="Process only first N chunks")
     ap.add_argument("--device", type=str, default=None, help="Device (cuda/cpu)")
@@ -482,13 +563,17 @@ def main():
         chunk_id = str(chunk["id"])
         text = str(chunk["text"])
         
+        # Optionally clean invisible Unicode characters
+        if args.clean_unicode:
+            text = clean_invisible_unicode(text)
+        
         res = process_chunk(model, chunk_id, text, args)
         out_rows.extend(res)
 
     # Write output CSV
     fieldnames = [
         "chunk_id", "seq_idx", "start_idx", "corruption", "position", "orig_token", "alt_token",
-        "question", "answer", "avg_logprob", "delta_from_clean", "prompt_avg_nll_increase",
+        "question", "answer", "avg_logprob", "delta_from_clean", "prompt_avg_nll_increase", "generated_answer",
     ]
     with open(args.out, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)

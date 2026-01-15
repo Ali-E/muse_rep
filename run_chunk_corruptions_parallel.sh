@@ -16,6 +16,9 @@ FLUENCY_TAU=0.8
 MIN_EFFECT_DROP=0.08
 MAX_CORRUPTIONS_PER_SEQ=20
 
+# Optional: Limit number of input rows to process (set to 0 or leave empty to process all)
+LIMIT=0
+
 # Number of GPUs to use
 NUM_GPUS=4
 GPU_IDS=(0 1 2 3)  # Adjust based on your available GPUs
@@ -38,9 +41,15 @@ import pandas as pd
 csv_file = "$CSV_INPUT"
 output_dir = "$OUTPUT_DIR"
 num_gpus = $NUM_GPUS
+limit = $LIMIT
 
 # Read the CSV
 df = pd.read_csv(csv_file)
+
+# Apply limit if specified
+if limit > 0:
+    df = df.iloc[:limit]
+    print(f"Limited to first {len(df)} rows")
 
 # Split into chunks
 chunk_size = (len(df) + num_gpus - 1) // num_gpus
@@ -81,6 +90,7 @@ for i in $(seq 0 $(($NUM_GPUS - 1))); do
             --min_effect_drop $MIN_EFFECT_DROP \
             --max_corruptions_per_seq $MAX_CORRUPTIONS_PER_SEQ \
             --only_content_words \
+            --clean_unicode \
             > ${OUTPUT_DIR}/log_gpu_${i}.txt 2>&1 &
         
         pids+=($!)
