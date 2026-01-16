@@ -27,8 +27,11 @@ def load_model(model_name: str, tokenizer_name: Optional[str] = None, device: Op
     if tokenizer_name is None:
         tokenizer_name = model_name
     
-    # Load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, use_fast=False)
+    # Load tokenizer (try fast first, fallback to slow)
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, use_fast=True)
+    except:
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, use_fast=False)
     
     # Check if model_name is a local path
     if os.path.exists(model_name):
@@ -136,6 +139,8 @@ def main():
                     help="Ablation mode used during site sweep (default: zero)")
     ap.add_argument("--chunk_format", action="store_true",
                     help="Use format from generate_chunk_corruptions.py (no blanks in questions)")
+    ap.add_argument("--tofu_format", action="store_true",
+                    help="Use format from TOFU dataset (question+answer columns, id field, no blanks)")
     ap.add_argument("--sweep_attn_heads", action="store_true",
                     help="Include attention heads in site sweep")
     ap.add_argument("--no_sweep_mlp", action="store_true",
@@ -155,7 +160,12 @@ def main():
     rows = load_csv(args.corruptions_csv)
     
     # Determine ID field based on format
-    id_field = "chunk_id" if args.chunk_format else "id"
+    if args.tofu_format:
+        id_field = "id"
+    elif args.chunk_format:
+        id_field = "chunk_id"
+    else:
+        id_field = "id"
     
     # Get unique IDs
     id_order = []
@@ -191,13 +201,13 @@ def main():
             continue
 
         # Get question and answer based on format
-        if args.chunk_format:
-            # generate_chunk_corruptions.py format: no blanks, just question + answer
+        if args.chunk_format or args.tofu_format:
+            # generate_chunk_corruptions.py or TOFU format: no blanks, just question + answer
             clean_q = clean.get("question", "")
             corr_q = best.get("question", "")
             answer = clean.get("answer", "")
             
-            # For chunk format, we concatenate question + answer as full sequence
+            # For chunk/tofu format, we concatenate question + answer as full sequence
             full_clean = clean_q + answer
             # Use empty prefix and suffix for answer_pred_positions
             pref_c = clean_q
@@ -228,10 +238,10 @@ def main():
         )
         if len(results) == 0:
             continue
-        top = results[0]
+        
         pos_clean = answer_pred_positions(model, pref_c, answer)
 
-        # Extract corruption metadata and restoration metrics
+        # Extract corruption metadata (same for all three saves)
         corruption_info = {
             "position": best.get("position", ""),
             "orig_token": best.get("orig_token", ""),
@@ -239,37 +249,52 @@ def main():
             "delta_from_clean": best.get("delta_from_clean", ""),
         }
         
-        # Add restoration metrics from patching
-        restoration_info = {
-            "clean_avg_lp": top["clean_avg_lp"],
-            "corr_avg_lp": top["corr_avg_lp"],
-            "patched_avg_lp": top["patched_avg_lp"],
-            "restoration": top["restoration"],
-            "fraction_restored": top["fraction_restored"],
-            "pns": top["pns"],
-            "p_on": top["p_on"],
-            "p_off": top["p_off"],
-        }
+        # Find best MLP, best resid, and best overall
+        top_overall = results[0] if len(results) > 0 else None
         
-        tensor_path = os.path.join(out_root, f"{sid}_top_site_act.pt")
-        meta_path = os.path.join(out_root, f"{sid}_top_site_meta.json")
-        save_top_site_activation(
-            model, clean_cache, top, pos_clean,
-            out_tensor_path=tensor_path,
-            out_meta_path=meta_path,
-            corruption_info=corruption_info,
-            restoration_info=restoration_info,
-        )
-        out_samples.append({
-            "sample_id": sid,
-            "meta_path": os.path.abspath(meta_path),
-            "tensor_path": os.path.abspath(tensor_path),
-            "model": args.model,
-        })
+        mlp_results = [r for r in results if r["site"] == "mlp_post"]
+        top_mlp = mlp_results[0] if len(mlp_results) > 0 else None
+        
+        resid_results = [r for r in results if r["site"] == "resid_post"]
+        top_resid = resid_results[0] if len(resid_results) > 0 else None
+        
+        # Save each variant
+        for variant_name, top_result in [("overall", top_overall), ("mlp", top_mlp), ("resid", top_resid)]:
+            if top_result is None:
+                continue
+            
+            # Add restoration metrics from patching
+            restoration_info = {
+                "clean_avg_lp": top_result["clean_avg_lp"],
+                "corr_avg_lp": top_result["corr_avg_lp"],
+                "patched_avg_lp": top_result["patched_avg_lp"],
+                "restoration": top_result["restoration"],
+                "fraction_restored": top_result["fraction_restored"],
+                "pns": top_result["pns"],
+                "p_on": top_result["p_on"],
+                "p_off": top_result["p_off"],
+            }
+            
+            tensor_path = os.path.join(out_root, f"{sid}_{variant_name}_top_site_act.pt")
+            meta_path = os.path.join(out_root, f"{sid}_{variant_name}_top_site_meta.json")
+            save_top_site_activation(
+                model, clean_cache, top_result, pos_clean,
+                out_tensor_path=tensor_path,
+                out_meta_path=meta_path,
+                corruption_info=corruption_info,
+                restoration_info=restoration_info,
+            )
+            out_samples.append({
+                "sample_id": sid,
+                "variant": variant_name,
+                "meta_path": os.path.abspath(meta_path),
+                "tensor_path": os.path.abspath(tensor_path),
+                "model": args.model,
+            })
 
     samples_csv = os.path.join(out_root, "samples.csv")
     with open(samples_csv, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["sample_id", "meta_path", "tensor_path", "model"])
+        writer = csv.DictWriter(f, fieldnames=["sample_id", "variant", "meta_path", "tensor_path", "model"])
         writer.writeheader()
         for r in out_samples:
             writer.writerow(r)

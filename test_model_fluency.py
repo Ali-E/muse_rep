@@ -121,12 +121,27 @@ def load_texts_from_files(file_paths: List[str]) -> List[str]:
         elif file_path.endswith('.csv'):
             with open(file_path, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
-                if 'text' not in reader.fieldnames:
-                    print(f"Warning: CSV file {file_path} must have a 'text' column. Skipping.")
+                
+                # Check if it's TOFU format (has 'question' and 'answer' columns)
+                if 'question' in reader.fieldnames and 'answer' in reader.fieldnames:
+                    print(f"Detected TOFU format in {file_path}, concatenating question and answer")
+                    for row in reader:
+                        question = row.get('question', '').strip()
+                        answer = row.get('answer', '').strip()
+                        if question and answer:
+                            # Concatenate question and answer as single sample
+                            text = f"Question: {question}\nAnswer: {answer}"
+                            texts.append(text)
+                
+                # Standard format with 'text' column
+                elif 'text' in reader.fieldnames:
+                    for row in reader:
+                        if row['text'].strip():
+                            texts.append(row['text'].strip())
+                
+                else:
+                    print(f"Warning: CSV file {file_path} must have either ('question' and 'answer') or 'text' column. Skipping.")
                     continue
-                for row in reader:
-                    if row['text'].strip():
-                        texts.append(row['text'].strip())
         
         elif file_path.endswith('.json'):
             with open(file_path, 'r', encoding='utf-8') as f:
@@ -170,11 +185,22 @@ def main():
     print(f"Device: {args.device}\n")
     
     # Load model and tokenizer (works for both local paths and HF model names)
-    tokenizer = AutoTokenizer.from_pretrained(
-        args.tokenizer, 
-        use_fast=False,
-        token=args.hf_token
-    )
+    # Try fast tokenizer first, fall back to slow if needed
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(
+            args.tokenizer, 
+            use_fast=True,
+            token=args.hf_token
+        )
+        print("Using fast tokenizer")
+    except Exception:
+        print("Fast tokenizer not available, falling back to slow tokenizer")
+        tokenizer = AutoTokenizer.from_pretrained(
+            args.tokenizer, 
+            use_fast=False,
+            token=args.hf_token
+        )
+    
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     
@@ -242,8 +268,8 @@ def main():
     for i, text in enumerate(test_texts, 1):
         ppl = compute_perplexity(model, tokenizer, text, args.device, max_length=args.max_length, stride=args.stride)
         perplexities.append(ppl)
-        print(f"\n{i}. Text: '{text[:60]}...'")
-        print(f"   Perplexity: {ppl:.2f}")
+        # print(f"\n{i}. Text: '{text[:60]}...'")
+        # print(f"   Perplexity: {ppl:.2f}")
     
     avg_ppl = np.mean(perplexities)
     print(f"\n{'='*80}")

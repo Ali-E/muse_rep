@@ -14,7 +14,7 @@ TOFU_SPLIT="train"  # Options: "train", "validation", "test"
 
 # GPU configuration
 NUM_GPUS=2  # Number of GPUs to use
-GPU_IDS="2,3"  # Comma-separated GPU IDs
+GPU_IDS="1,3"  # Comma-separated GPU IDs
 
 # MUSE paper hyperparameters (adjusted for Pythia-1.4b)
 # Effective batch size = 32 (per_device_batch_size * num_gpus * grad_accum_steps)

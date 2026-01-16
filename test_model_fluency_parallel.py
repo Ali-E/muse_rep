@@ -54,20 +54,49 @@ def main():
     
     # Load all texts first using the same loading function
     print("Loading texts from input files...")
-    sys.path.insert(0, str(Path(__file__).parent))
-    from test_model_fluency import load_texts_from_files
     
     # Load texts from each file separately to track file origins
     all_texts = []
     file_text_indices = {}  # Maps file index to list of text indices
     
     for file_idx, file_path in enumerate(args.input_files):
-        texts = load_texts_from_files([file_path])
+        # Handle CSV files with potential TOFU format
+        if file_path.endswith('.csv'):
+            import csv
+            with open(file_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                rows = list(reader)
+                
+                # Check if this is TOFU format (has question and answer columns)
+                if rows and 'question' in rows[0] and 'answer' in rows[0]:
+                    # TOFU format: concatenate question and answer
+                    texts = [f"Question: {row['question']}\nAnswer: {row['answer']}" for row in rows]
+                    print(f"  File {file_idx} ({os.path.basename(file_path)}): {len(texts)} texts (TOFU format)")
+                else:
+                    # Regular CSV: use 'text' column if available, otherwise concatenate all values
+                    if 'text' in rows[0]:
+                        texts = [row['text'] for row in rows if row['text'].strip()]
+                    else:
+                        texts = [' '.join(row.values()) for row in rows if any(v.strip() for v in row.values())]
+                    print(f"  File {file_idx} ({os.path.basename(file_path)}): {len(texts)} texts")
+        elif file_path.endswith('.json'):
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    texts = [item['text'] if isinstance(item, dict) else str(item) for item in data]
+                else:
+                    texts = [data['text']] if 'text' in data else [str(data)]
+                print(f"  File {file_idx} ({os.path.basename(file_path)}): {len(texts)} texts")
+        else:  # .txt file
+            with open(file_path, 'r', encoding='utf-8') as f:
+                text = f.read().strip()
+                texts = [text] if text else []
+                print(f"  File {file_idx} ({os.path.basename(file_path)}): {len(texts)} texts")
+        
         start_idx = len(all_texts)
         all_texts.extend(texts)
         end_idx = len(all_texts)
         file_text_indices[file_idx] = list(range(start_idx, end_idx))
-        print(f"  File {file_idx} ({os.path.basename(file_path)}): {len(texts)} texts")
     
     if not all_texts:
         print("Error: No texts loaded from input files.")
@@ -232,7 +261,10 @@ def main():
                 print("Loading model for WikiText evaluation...")
                 
                 # Load model and tokenizer
-                tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, use_fast=False)
+                try:
+                    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, use_fast=True)
+                except:
+                    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, use_fast=False)
                 if tokenizer.pad_token is None:
                     tokenizer.pad_token = tokenizer.eos_token
                 
@@ -313,7 +345,10 @@ def main():
                     import torch
                     from transformers import AutoModelForCausalLM, AutoTokenizer
                     
-                    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, use_fast=False)
+                    try:
+                        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, use_fast=True)
+                    except:
+                        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, use_fast=False)
                     if tokenizer.pad_token is None:
                         tokenizer.pad_token = tokenizer.eos_token
                     
@@ -330,7 +365,10 @@ def main():
                 import torch
                 from transformers import AutoModelForCausalLM, AutoTokenizer
                 
-                tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, use_fast=False)
+                try:
+                    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, use_fast=True)
+                except:
+                    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, use_fast=False)
                 if tokenizer.pad_token is None:
                     tokenizer.pad_token = tokenizer.eos_token
                 

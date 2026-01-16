@@ -39,8 +39,8 @@ forget_portion_list=(0.1)
 # forget_portion_list=(1.0)
 
 
-beta_vals=(3.0 4.0)
-gamma_vals=(0.1 0.05)
+beta_vals=(3.0 4.0 3.0 4.0 3.0 4.0 3.0 4.0 3.0 4.0 3.0 4.0 3.0 4.0 3.0 4.0)
+gamma_vals=(0.1 0.05 0.1 0.05 0.1 0.05 0.1 0.05 0.1 0.05 0.1 0.05)
 
 
 for gamma in "${gamma_vals[@]}"; do
@@ -52,7 +52,7 @@ for gamma in "${gamma_vals[@]}"; do
                 out_dir="./Llama2_ft_mine/ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_UW_s${SEED}"
                 # out_dir="./ckpt/$CORPUS/${algo}_b${beta}_g${gamma}_${forget_portion}_s${SEED}"
             fi
-            CUDA_VISIBLE_DEVICES=0,2 python unlearn.py \
+            CUDA_VISIBLE_DEVICES=1,3 python unlearn.py \
                 --algo $algo \
                 --model_dir $TARGET_DIR --tokenizer_dir $LLAMA_DIR \
                 --data_file $FORGET --retain_data_file $RETAIN \

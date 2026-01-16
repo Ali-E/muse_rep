@@ -410,6 +410,18 @@ def lm_single_token_proposals(
         for alt_id in top_ids.tolist():
             if alt_id == orig_id:
                 continue
+            
+            # Decode the alternative token
+            alt_token_str = model.tokenizer.decode([alt_id])
+            
+            # Skip whitespace and punctuation tokens
+            if alt_token_str.strip() in ['', '.', '!', '?', ',', ';', ':', '"', "'", '-', '—', '–', '(', ')', '[', ']', '{', '}', '/', '\\', '|', '@', '#', '$', '%', '^', '&', '*', '+', '=', '<', '>', '~', '`']:
+                continue
+            
+            # Skip if token is only whitespace
+            if not alt_token_str.strip():
+                continue
+            
             new_toks = toks.clone()
             new_toks[0, j] = alt_id
             # decode without BOS token
@@ -423,7 +435,7 @@ def lm_single_token_proposals(
             proposals.append({
                 "pos": j,
                 "orig_token": orig_str,
-                "alt_token": model.tokenizer.decode([alt_id]),
+                "alt_token": alt_token_str,
                 "new_question": new_q,
                 "nll_increase": nll - base_nll,
             })

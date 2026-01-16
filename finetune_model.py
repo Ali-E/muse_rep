@@ -154,16 +154,23 @@ def finetune(
     print(f"Loading model from {model_path}")
     print(f"Loading tokenizer from {tokenizer_path}")
     
-    # Load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, use_fast=False)
+    # Load tokenizer - prefer fast tokenizer if available
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, use_fast=True)
+        print("Using fast tokenizer")
+    except Exception:
+        print("Fast tokenizer not available, falling back to slow tokenizer")
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, use_fast=False)
+    
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     
     # Load model using regular AutoModelForCausalLM for training
+    # Note: Don't use device_map='auto' with torchrun - Trainer handles device placement
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
         torch_dtype=torch.bfloat16 if bf16 else torch.float32,
-        device_map="auto"
+        # device_map="auto"
     )
     
     # Load and prepare data
@@ -217,6 +224,7 @@ def finetune(
         gradient_checkpointing=False,
         report_to="none",  # Disable wandb
         save_total_limit=2,  # Keep only last 2 checkpoints
+        ddp_find_unused_parameters=False,  # Disable for better performance
     )
     
     # Trainer
