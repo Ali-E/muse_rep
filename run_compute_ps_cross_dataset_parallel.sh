@@ -24,7 +24,8 @@
 #   - "" (empty): Use variant from samples.csv (default)
 
 # Configuration
-MODEL="meta-llama/Llama-2-7b-hf"
+# MODEL="meta-llama/Llama-2-7b-hf"
+MODEL="/scratch/aebrahim/muse_rep/finetuned_tofu_llama2_model/"
 TOKENIZER="meta-llama/Llama-2-7b-hf"
 
 # Source: Sites localized from tofu_corruptions.csv
