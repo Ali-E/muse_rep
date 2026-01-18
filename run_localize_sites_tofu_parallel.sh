@@ -104,6 +104,7 @@ for i in $(seq 0 $(($NUM_GPUS - 1))); do
             --corruptions_csv $CORRUPTIONS_CSV \
             --out_dir ${OUTPUT_DIR}/gpu_${i}_output \
             --model $MODEL \
+            --tokenizer $TOKENIZER \
             --tofu_format \
             --ablation $ABLATION \
             --ids "$IDS_STR" \

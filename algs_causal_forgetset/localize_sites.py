@@ -79,25 +79,46 @@ def load_model(model_name: str, tokenizer_name: Optional[str] = None, device: Op
             device_map='auto'
         )
         
-        # Determine the official model name for HookedTransformer
+        # Determine the official model name for HookedTransformer from config
         config_path = os.path.join(model_name, "config.json")
-        official_name = "meta-llama/Llama-2-7b-hf"  # default
-        
+        official_name = None
+
         if os.path.exists(config_path):
             import json
             with open(config_path, 'r') as f:
                 config = json.load(f)
-            
+
+            model_type = config.get("model_type")
+
             # Infer official model name from config
-            if config.get("model_type") == "llama":
+            if model_type == "llama":
                 hidden_size = config.get("hidden_size", 4096)
                 num_layers = config.get("num_hidden_layers", 32)
-                
+
                 if hidden_size == 4096 and num_layers == 32:
                     official_name = "meta-llama/Llama-2-7b-hf"
                 elif hidden_size == 5120 and num_layers == 40:
                     official_name = "meta-llama/Llama-2-13b-hf"
-        
+            elif model_type == "gpt_neox":
+                hidden_size = config.get("hidden_size", 2048)
+                num_layers = config.get("num_hidden_layers", 24)
+
+                # Map to Pythia models based on size
+                if hidden_size == 2048 and num_layers == 24:
+                    official_name = "EleutherAI/pythia-1.4b"
+                elif hidden_size == 2560 and num_layers == 32:
+                    official_name = "EleutherAI/pythia-2.8b"
+                elif hidden_size == 4096 and num_layers == 32:
+                    official_name = "EleutherAI/pythia-6.9b"
+                elif hidden_size == 5120 and num_layers == 36:
+                    official_name = "EleutherAI/pythia-12b"
+                else:
+                    # Fallback to smallest
+                    official_name = "EleutherAI/pythia-1.4b"
+
+        if official_name is None:
+            raise ValueError(f"Could not determine model architecture from {config_path}")
+
         print(f"Wrapping with HookedTransformer using architecture: {official_name}")
         
         # Wrap with HookedTransformer
