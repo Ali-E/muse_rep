@@ -14,6 +14,7 @@ temp/*
 !matching_facts_combined.csv
 !books_forget.csv
 !corruptions/chunk_corruptions.csv
+!tofu_data/*
 key.csv
 *.png
 plot_results.py
@@ -30,7 +31,6 @@ corruptions/*
 site_outputs/*
 site_outputs_tofu/*
 site_outputs_tofu_split_2p0x/*
-tofu_data/*
 finetuned_tofu_pythia_model/*
 results*.json
 fluency_results/*
