@@ -2,8 +2,10 @@
 
 # Configuration
 # MODEL="EleutherAI/pythia-1.4b"
-MODEL="meta-llama/Llama-2-7b-hf"
+# MODEL="meta-llama/Llama-2-7b-hf"
 CORRUPTIONS_DIR="corruptions_tofu_llama2"
+MODEL="/scratch/aebrahim/muse_rep/finetuned_tofu_llama2_model/"
+TOKENIZER="meta-llama/Llama-2-7b-hf"
 # CORRUPTIONS_DIR="corruptions_tofu_llama2_query"
 
 # If you used --split_long_answers in corruption generation, set this to match
