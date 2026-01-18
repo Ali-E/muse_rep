@@ -72,8 +72,8 @@ def is_content_word(token_str: str) -> bool:
     word_part = cleaned.lstrip('Ġ▁')  # Remove common BPE prefixes
     
     # Check if it's a function word (case-insensitive)
-    if word_part.lower() in FUNCTION_WORDS:
-        return False
+    # if word_part.lower() in FUNCTION_WORDS:
+    #     return False
     
     # If it contains at least one alphabetic character and passes other filters, it's likely a content word
     if any(c.isalpha() for c in word_part):
