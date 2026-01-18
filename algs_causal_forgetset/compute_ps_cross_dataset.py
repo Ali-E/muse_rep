@@ -132,6 +132,26 @@ def best_corruption_by_id(rows: List[Dict[str, str]], chunk_format: bool = False
     return best
 
 
+def all_corruptions_by_id(rows: List[Dict[str, str]], chunk_format: bool = False) -> Dict[str, List[Dict[str, str]]]:
+    """Get ALL corruptions per ID from target corruptions (excluding 'none').
+
+    For chunk_format, uses chunk_id instead of id.
+    Returns a dict mapping ID -> list of corruption rows.
+    """
+    corruptions: Dict[str, List[Dict[str, str]]] = {}
+    id_field = "chunk_id" if chunk_format else "id"
+    for r in rows:
+        tid = str(r.get(id_field, ""))
+        corruption_type = r.get("corruption", "")
+        # Skip 'none' corruptions (clean versions)
+        if corruption_type == "none":
+            continue
+        if tid not in corruptions:
+            corruptions[tid] = []
+        corruptions[tid].append(r)
+    return corruptions
+
+
 def build_default_judge() -> BaseJudge:
     return ProbabilityAnswerJudge(mode="avg_logprob_exp")
 
@@ -162,7 +182,8 @@ def main():
     )
     ap.add_argument("--out_agg_csv", required=True, help="Output aggregate CSV")
     ap.add_argument("--out_detailed_csv", required=True, help="Output detailed CSV")
-    ap.add_argument("--out_ranked_csv", default=None, help="Output ranked sources per target CSV")
+    ap.add_argument("--out_ranked_csv", default=None, help="Output ranked sources per target CSV (based on best corruption)")
+    ap.add_argument("--out_avg_ranked_csv", default=None, help="Output ranked sources per target CSV (based on average over all corruptions)")
     ap.add_argument("--site_type", default=None,
                     help="Site type to use: overall, mlp, resid, last_mlp_in, last_mlp_out. If not specified, uses the variant from samples.csv")
     ap.add_argument("--limit", type=int, default=None, help="Limit number of samples to process")
@@ -225,6 +246,9 @@ def main():
         target_corr_rows = load_csv(args.target_corruptions_csv)
         best_target_corr = best_corruption_by_id(target_corr_rows, chunk_format=False)
 
+    # Also get all corruptions for averaging (if avg_ranked output requested)
+    all_target_corr = all_corruptions_by_id(target_corr_rows, chunk_format=args.chunk_format)
+
     if args.limit is not None:
         target_prompts = target_prompts[: args.limit]
 
@@ -233,7 +257,8 @@ def main():
 
     print(f"Loaded {len(source_samples)} source samples (sites)")
     print(f"Loaded {len(target_prompts)} target prompts")
-    print(f"Loaded {len(best_target_corr)} target corruptions")
+    print(f"Loaded {len(best_target_corr)} best target corruptions")
+    print(f"Loaded {len(all_target_corr)} target IDs with all corruptions (total: {sum(len(v) for v in all_target_corr.values())})")
 
     # ------------------------------------------------------------------
     # Precompute and cache base scores for target prompts:
@@ -297,6 +322,10 @@ def main():
 
     # For ranked output: target_id -> list of (source_sample_id, fraction_restored, meta)
     target_rankings: Dict[str, List[Dict]] = {}
+
+    # For average-based ranked output: (source_id, target_id) -> list of fraction_restored scores
+    # This will be used to compute average over all corruptions
+    avg_rankings_data: Dict[str, Dict[str, Dict]] = {}  # source_id -> target_id -> {scores: [], meta: {}}
 
     # ------------------------------------------------------------------
     # Main loop: For each source sample (site), evaluate on all target prompts
@@ -400,6 +429,65 @@ def main():
                 "hook_name": meta.get("hook_name", meta.get("site", "")),
             })
 
+            # ------------------------------------------------------------------
+            # For average-based ranking: evaluate ALL corruptions for this (source, target) pair
+            # ------------------------------------------------------------------
+            if args.out_avg_ranked_csv:
+                all_corr_list = all_target_corr.get(tid, [])
+                if all_corr_list:
+                    if sid not in avg_rankings_data:
+                        avg_rankings_data[sid] = {}
+                    if tid not in avg_rankings_data[sid]:
+                        avg_rankings_data[sid][tid] = {
+                            "scores": [],
+                            "meta": {
+                                "source_sample_id": sid,
+                                "source_question": s.get("question", ""),
+                                "source_answer": s.get("original_answer", ""),
+                                "target_prompt_id": tid,
+                                "target_question": q,
+                                "target_answer": a,
+                                "r": r,  # clean score (same for all corruptions)
+                                "meta_path": meta_path,
+                                "hook_name": meta.get("hook_name", meta.get("site", "")),
+                            }
+                        }
+
+                    # Evaluate each corruption
+                    for corr in all_corr_list:
+                        qc_all = corr.get("question", "")
+                        if not qc_all:
+                            continue
+
+                        # Get prefix/suffix for this corruption
+                        if args.tofu_format or args.chunk_format:
+                            pref_c_all = qc_all
+                            suff_c_all = ""
+                        else:
+                            pref_c_all, suff_c_all = split_blank(qc_all)
+
+                        # Compute corrupted base score for this corruption
+                        r_c_all = judge.score(model, plain_runner, pref_c_all, a, suff_c_all)
+
+                        # Get answer positions for this corruption
+                        pos_corr_all = answer_pred_positions(model, pref_c_all, a)
+                        if not pos_corr_all:
+                            continue
+
+                        # Patch and score
+                        try:
+                            hook_name_on_all, hook_on_all = make_patch_hook_from_slice(meta, act_slice, pos_corr_all)
+                            on_runner_all = hooks_runner_factory(model, [(hook_name_on_all, hook_on_all)])
+                            r_on_c_all = judge.score(model, on_runner_all, pref_c_all, a, suff_c_all)
+                        except Exception as e:
+                            continue
+
+                        # Compute fraction restored for this corruption
+                        gap_all = r - r_c_all
+                        fr_all = (r_on_c_all - r_c_all) / gap_all if gap_all > args.eps else 0.0
+
+                        avg_rankings_data[sid][tid]["scores"].append(fr_all)
+
         # Compute PS score for this source sample
         ps = (numer / denom) if denom > 0 else 0.0
         agg_rows.append({
@@ -477,6 +565,63 @@ def main():
                 writer.writerow(r)
 
         print(f"Wrote {len(ranked_rows)} ranked rows to {args.out_ranked_csv}")
+
+    # Write average-based ranked results (sources ranked by avg fraction_restored over all corruptions)
+    if args.out_avg_ranked_csv and avg_rankings_data:
+        # Build list of (source, target, avg_fraction_restored, n_corruptions, meta)
+        avg_ranked_entries: List[Dict] = []
+        for sid, targets in avg_rankings_data.items():
+            for tid, data in targets.items():
+                scores = data["scores"]
+                if scores:
+                    avg_fr = sum(scores) / len(scores)
+                    entry = {
+                        **data["meta"],
+                        "avg_fraction_restored": avg_fr,
+                        "n_corruptions": len(scores),
+                    }
+                    avg_ranked_entries.append(entry)
+
+        # Group by target and rank
+        avg_target_rankings: Dict[str, List[Dict]] = {}
+        for entry in avg_ranked_entries:
+            tid = entry["target_prompt_id"]
+            if tid not in avg_target_rankings:
+                avg_target_rankings[tid] = []
+            avg_target_rankings[tid].append(entry)
+
+        avg_ranked_rows = []
+        for tid in sorted(avg_target_rankings.keys()):
+            rankings = avg_target_rankings[tid]
+            rankings.sort(key=lambda x: x["avg_fraction_restored"], reverse=True)
+
+            for rank, entry in enumerate(rankings, start=1):
+                entry["rank"] = rank
+                avg_ranked_rows.append(entry)
+
+        with open(args.out_avg_ranked_csv, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "target_prompt_id",
+                    "target_question",
+                    "target_answer",
+                    "rank",
+                    "source_sample_id",
+                    "source_question",
+                    "source_answer",
+                    "avg_fraction_restored",
+                    "n_corruptions",
+                    "r",
+                    "meta_path",
+                    "hook_name",
+                ],
+            )
+            writer.writeheader()
+            for r in avg_ranked_rows:
+                writer.writerow(r)
+
+        print(f"Wrote {len(avg_ranked_rows)} average-ranked rows to {args.out_avg_ranked_csv}")
 
     print(f"\nWrote {len(agg_rows)} aggregate rows to {args.out_agg_csv}")
     print(f"Wrote {len(detailed_rows)} detailed rows to {args.out_detailed_csv}")

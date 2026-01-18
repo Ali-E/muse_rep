@@ -34,11 +34,11 @@ SOURCE_SAMPLES_CSV="site_outputs_tofu_llama2/samples.csv"
 # Target format: "tofu" for question/answer pairs, "chunk" for chunk format
 # - tofu: Uses TARGET_PROMPTS_CSV (id,question,answer) and TARGET_CORRUPTIONS_CSV (id,question,answer,corruption)
 # - chunk: Uses only TARGET_CORRUPTIONS_CSV (chunk_id,question,answer,corruption) - prompts are derived from corruptions
-TARGET_FORMAT="tofu"
+TARGET_FORMAT="chunk"
 
 # Target: Prompts and corruptions from tofu_query.csv (for tofu format)
-TARGET_PROMPTS_CSV="tofu_data/tofu_query_with_ids.csv"
-TARGET_CORRUPTIONS_CSV="corruptions_tofu_llama2_query/tofu_corruptions.csv"
+TARGET_PROMPTS_CSV="tofu_data/authors_paragraphs_short.csv"
+TARGET_CORRUPTIONS_CSV="corruptions_tofu_paragraphs/chunk_corruptions_short.csv"
 
 # Target: Corruptions for chunk format (uncomment to use chunk format)
 # TARGET_FORMAT="chunk"
@@ -190,6 +190,7 @@ for i in $(seq 0 $(($NUM_GPUS - 1))); do
             --out_agg_csv ${OUTPUT_DIR}/gpu_${i}_agg${FILE_SUFFIX}.csv \
             --out_detailed_csv ${OUTPUT_DIR}/gpu_${i}_detailed${FILE_SUFFIX}.csv \
             --out_ranked_csv ${OUTPUT_DIR}/gpu_${i}_ranked${FILE_SUFFIX}.csv \
+            --out_avg_ranked_csv ${OUTPUT_DIR}/gpu_${i}_avg_ranked${FILE_SUFFIX}.csv \
             --eps $EPS"
 
         # Add format-specific options
@@ -311,6 +312,43 @@ if ranked_files:
 else:
     print("Warning: No ranked files found!")
 
+# Merge average-ranked files (ranked by average over all corruptions)
+avg_ranked_files = []
+for i in range(num_gpus):
+    avg_ranked_file = os.path.join(output_dir, f"gpu_{i}_avg_ranked{file_suffix}.csv")
+    if os.path.exists(avg_ranked_file):
+        avg_ranked_files.append(avg_ranked_file)
+        print(f"Found avg_ranked file: {avg_ranked_file}")
+
+if avg_ranked_files:
+    avg_ranked_dfs = [pd.read_csv(f) for f in avg_ranked_files]
+    merged_avg_ranked = pd.concat(avg_ranked_dfs, ignore_index=True)
+
+    # Re-sort by target_prompt_id and avg_fraction_restored
+    merged_avg_ranked = merged_avg_ranked.sort_values(
+        by=['target_prompt_id', 'avg_fraction_restored'],
+        ascending=[True, False]
+    )
+
+    # Re-compute ranks per target
+    merged_avg_ranked['rank'] = merged_avg_ranked.groupby('target_prompt_id').cumcount() + 1
+
+    final_avg_ranked = os.path.join(output_dir, f"ps_avg_ranked{file_suffix}.csv")
+    merged_avg_ranked.to_csv(final_avg_ranked, index=False)
+    print(f"Merged {len(avg_ranked_files)} avg_ranked files into {final_avg_ranked}")
+    print(f"Total rows: {len(merged_avg_ranked)}")
+
+    # Print summary of top sources per target (by average)
+    print("\nTop 5 sources per target (by average over all corruptions):")
+    for target_id in sorted(merged_avg_ranked['target_prompt_id'].unique())[:5]:
+        top5 = merged_avg_ranked[merged_avg_ranked['target_prompt_id'] == target_id].head(5)
+        print(f"\nTarget {target_id}:")
+        for _, row in top5.iterrows():
+            print(f"  Rank {int(row['rank'])}: Source {row['source_sample_id']} - "
+                  f"Avg fraction restored: {row['avg_fraction_restored']:.4f} (n={int(row['n_corruptions'])})")
+else:
+    print("Warning: No avg_ranked files found!")
+
 EOF
 
 # Clean up intermediate files
@@ -320,6 +358,7 @@ rm -f ${OUTPUT_DIR}/gpu_*_samples.csv
 rm -f ${OUTPUT_DIR}/gpu_*_agg${FILE_SUFFIX}.csv
 rm -f ${OUTPUT_DIR}/gpu_*_detailed${FILE_SUFFIX}.csv
 rm -f ${OUTPUT_DIR}/gpu_*_ranked${FILE_SUFFIX}.csv
+rm -f ${OUTPUT_DIR}/gpu_*_avg_ranked${FILE_SUFFIX}.csv
 
 echo ""
 echo "======================================"
@@ -328,7 +367,8 @@ echo "======================================"
 echo "Results saved to:"
 echo "  Aggregate: ${OUTPUT_DIR}/ps_agg${FILE_SUFFIX}.csv"
 echo "  Detailed: ${OUTPUT_DIR}/ps_detailed${FILE_SUFFIX}.csv"
-echo "  Ranked: ${OUTPUT_DIR}/ps_ranked${FILE_SUFFIX}.csv"
+echo "  Ranked (best corruption): ${OUTPUT_DIR}/ps_ranked${FILE_SUFFIX}.csv"
+echo "  Ranked (avg all corruptions): ${OUTPUT_DIR}/ps_avg_ranked${FILE_SUFFIX}.csv"
 echo "Logs saved to: ${OUTPUT_DIR}/log_gpu_*${FILE_SUFFIX}.txt"
 echo "======================================"
 
