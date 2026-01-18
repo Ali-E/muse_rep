@@ -32,7 +32,11 @@ def load_model(model_name: str, tokenizer_name: Optional[str] = None, device: Op
 
     # Load tokenizer as object first
     from transformers import AutoTokenizer, AutoModelForCausalLM
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, use_fast=False)
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, use_fast=False)
+    except ValueError:
+        # Some tokenizers (e.g., GPTNeoX) only have fast versions
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
 
     # Check if model_name is a local path
     if os.path.exists(model_name):
