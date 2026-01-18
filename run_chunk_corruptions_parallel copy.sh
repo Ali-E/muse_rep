@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # Configuration
-MODEL_DIR="/scratch/aebrahim/muse_rep/finetuned_tofu_llama2_model/"
+MODEL_DIR="/scratch/aebrahim/muse_rep/finetuned_books_model/"
 TOKENIZER_DIR="meta-llama/Llama-2-7b-hf"
-CSV_INPUT="tofu_data/authors_paragraphs_short.csv"
-OUTPUT_DIR="corruptions_tofu_paragraphs"
+CSV_INPUT="data/books/raw/forget_chunks.csv"
+OUTPUT_DIR="corruptions"
 
 # Corruption parameters
-SEQ_LENGTH=120
-NUM_SEQS_PER_CHUNK=1
+SEQ_LENGTH=100
+NUM_SEQS_PER_CHUNK=10
 TOP_K=40
 MAX_PER_POS=5
 MAX_TOTAL=20
@@ -68,7 +68,6 @@ for i in range(num_gpus):
 EOF
 
 # Launch parallel processes on each GPU
-            # --only_content_words \
 pids=()
 for i in $(seq 0 $(($NUM_GPUS - 1))); do
     GPU_ID=${GPU_IDS[$i]}
@@ -89,9 +88,9 @@ for i in $(seq 0 $(($NUM_GPUS - 1))); do
             --max_per_pos $MAX_PER_POS \
             --max_total $MAX_TOTAL \
             --fluency_tau $FLUENCY_TAU \
-            --only_content_words \
             --min_effect_drop $MIN_EFFECT_DROP \
             --max_corruptions_per_seq $MAX_CORRUPTIONS_PER_SEQ \
+            --only_content_words \
             --clean_unicode \
             --min_seq_length_ratio $min_seq_length_ratio \
             > ${OUTPUT_DIR}/log_gpu_${i}.txt 2>&1 &

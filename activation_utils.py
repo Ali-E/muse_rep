@@ -110,3 +110,47 @@ def make_patch_hook_broadcast_from_slice(
     return hook_name, hook_fn
 
 
+def make_average_hook_from_slice(
+    meta: Dict,
+    act_slice: torch.Tensor,
+    pos_corr: List[int],
+):
+    """
+    Create a hook that averages the saved clean activation with the current (corrupted) activation.
+    This is useful for last_mlp_in/last_mlp_out to blend clean and corrupted states.
+    The meta must include: hook_name, head_idx (or None), positions_clean.
+    act_slice shape: [B, S, D] or [B, S, d_head] for selected head.
+    """
+    hook_name = meta["hook_name"]
+    head_idx = meta.get("head_idx", None)
+    pos_clean: List[int] = meta["positions_clean"]
+    # Allow partial alignment if sequence lengths differ
+    use_len = min(len(pos_clean), len(pos_corr))
+    pos_clean = pos_clean[:use_len]
+    pos_corr = pos_corr[:use_len]
+
+    def hook_fn(act, hook):
+        # act is [B,S,D] or [B,S,H,d_head]
+        # act_slice is [B,S_saved,D] or [B,S_saved,d_head]
+        S = act.shape[1]
+        S_saved = act_slice.shape[1]
+        max_len = min(len(pos_corr), S_saved)
+        if head_idx is None:
+            # resid/mlp: average current value with stored clean value
+            for k in range(max_len):
+                pr = pos_corr[k]
+                if 0 <= pr < S:
+                    clean_act = act_slice[:, k, :].to(act.device)
+                    act[:, pr, :] = (act[:, pr, :] + clean_act) / 2.0
+        else:
+            # attn result: average for specific head
+            for k in range(max_len):
+                pr = pos_corr[k]
+                if 0 <= pr < S:
+                    clean_act = act_slice[:, k, :].to(act.device)
+                    act[:, pr, head_idx, :] = (act[:, pr, head_idx, :] + clean_act) / 2.0
+        return act
+
+    return hook_name, hook_fn
+
+

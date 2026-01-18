@@ -320,13 +320,16 @@ def sample_subsequences(
     
     while len(sampled) < num_seqs and attempts < max_attempts:
         attempts += 1
-        
+
         if len(valid_starts) == 0:
             break
-            
-        # Pick a random start
+
+        # Pick a random start, or use first position if only one sequence requested
         import random
-        start_idx = random.choice(valid_starts)
+        if num_seqs == 1:
+            start_idx = 0
+        else:
+            start_idx = random.choice(valid_starts)
         # Use seq_length if available, otherwise use remaining tokens
         actual_length = min(seq_length, len(full_tokens) - start_idx)
         end_idx = start_idx + actual_length

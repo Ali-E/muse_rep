@@ -150,6 +150,8 @@ def main():
     ap.add_argument("--eps", type=float, default=1e-6)
     ap.add_argument("--chunk_format", action="store_true",
                     help="Use chunk format (no blanks in questions)")
+    ap.add_argument("--tofu_format", action="store_true",
+                    help="Use TOFU format (question+answer columns, no blanks)")
     args = ap.parse_args()
 
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -165,7 +167,7 @@ def main():
     best_corr = None
     if args.corruptions_csv:
         corr_rows = load_csv(args.corruptions_csv)
-        if args.chunk_format:
+        if args.chunk_format or args.tofu_format:
             best_corr = best_corruption_by_chunk_id(corr_rows)
         else:
             best_corr = best_corruption_by_id(corr_rows)
@@ -203,13 +205,13 @@ def main():
             # For chunk format without corruptions_csv, we'll construct qc later from meta
             qc = None
         
-        if not qc and not args.chunk_format:
-            # Skip if no corruption and not chunk format
+        if not qc and not args.chunk_format and not args.tofu_format:
+            # Skip if no corruption and not chunk/tofu format
             continue
 
-        # Handle chunk format vs blank format
-        if args.chunk_format:
-            # Chunk format: no blanks, question is just prefix
+        # Handle chunk/tofu format vs blank format
+        if args.chunk_format or args.tofu_format:
+            # Chunk/TOFU format: no blanks, question is just prefix
             pref = q
             suff = ""
             pref_c = qc if qc else q  # Will be updated from meta if qc is None
@@ -276,8 +278,8 @@ def main():
             a = str(info["a"])
             
             # Reconstruct corrupted question
-            if args.chunk_format:
-                # For chunk format, we need to apply the token substitution
+            if args.chunk_format or args.tofu_format:
+                # For chunk/TOFU format, we need to apply the token substitution
                 # This is a simplified approach - in practice you'd tokenize and apply the substitution
                 pref_c = q  # Using clean as approximation
                 suff_c = ""

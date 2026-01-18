@@ -1,21 +1,23 @@
 #!/bin/bash
 
 # Configuration
-MODEL="EleutherAI/pythia-1.4b"
-CORRUPTIONS_DIR="corruptions_tofu"
+# MODEL="EleutherAI/pythia-1.4b"
+MODEL="meta-llama/Llama-2-7b-hf"
+CORRUPTIONS_DIR="corruptions_tofu_llama2"
+# CORRUPTIONS_DIR="corruptions_tofu_llama2_query"
 
 # If you used --split_long_answers in corruption generation, set this to match
 # Set to empty string "" if no splitting was used
-# SPLIT_THRESHOLD=""  # e.g., "2p0" for threshold 2.0, or "" for no splitting
-SPLIT_THRESHOLD="2p0"  # e.g., "2p0" for threshold 2.0, or "" for no splitting
+SPLIT_THRESHOLD=""  # e.g., "2p0" for threshold 2.0, or "" for no splitting
+# SPLIT_THRESHOLD="2p0"  # e.g., "2p0" for threshold 2.0, or "" for no splitting
 
 # Determine corruptions CSV filename
 if [ -z "$SPLIT_THRESHOLD" ]; then
     CORRUPTIONS_CSV="${CORRUPTIONS_DIR}/tofu_corruptions.csv"
-    OUTPUT_DIR="site_outputs_tofu"
+    OUTPUT_DIR="site_outputs_tofu_llama2"
 else
     CORRUPTIONS_CSV="${CORRUPTIONS_DIR}/tofu_corruptions_split_${SPLIT_THRESHOLD}x.csv"
-    OUTPUT_DIR="site_outputs_tofu_split_${SPLIT_THRESHOLD}x"
+    OUTPUT_DIR="site_outputs_tofu_llama2_split_${SPLIT_THRESHOLD}x"
 fi
 
 # Localization parameters
@@ -30,8 +32,8 @@ NO_SWEEP_RESID=""    # Set to "--no_sweep_resid" to disable residual stream swee
 LIMIT=0
 
 # Number of GPUs to use
-NUM_GPUS=2
-GPU_IDS=(1 3)  # Adjust based on your available GPUs
+NUM_GPUS=3
+GPU_IDS=(0 1 3)  # Adjust based on your available GPUs
 
 # Create output directory
 mkdir -p $OUTPUT_DIR
@@ -198,7 +200,8 @@ merged_df['tensor_path'] = merged_df.apply(
 )
 
 # Save merged samples.csv
-final_samples = os.path.join(final_out_dir, "samples.csv")
+# final_samples = os.path.join(final_out_dir, "samples.csv")
+final_samples = os.path.join(output_dir, "samples.csv")
 merged_df.to_csv(final_samples, index=False)
 print(f"\nMerged {len(samples_files)} files into {final_samples}")
 print(f"Total samples: {len(merged_df)}")

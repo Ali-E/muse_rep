@@ -17,7 +17,42 @@ from patch_sweep import (
     split_blank,
     answer_pred_positions,
     save_top_site_activation,
+    make_patch_hook,
+    hooks_runner_factory,
 )
+
+
+def greedy_generate_with_patching(
+    model: HookedTransformer,
+    prompt: str,
+    max_new_tokens: int = 100,
+    stop_on_punct: bool = True,
+    hooks: Optional[List[Tuple[str, callable]]] = None,
+) -> str:
+    """Generate answer greedily with optional patching hooks."""
+    device = model.cfg.device
+    toks = model.to_tokens(prompt, prepend_bos=True).to(device)
+    eos_id = getattr(model.tokenizer, "eos_token_id", None)
+    generated_ids = []
+
+    with torch.no_grad():
+        for _ in range(max_new_tokens):
+            if hooks:
+                logits = model.run_with_hooks(toks, fwd_hooks=hooks)
+            else:
+                logits = model(toks)
+            
+            next_id = int(torch.argmax(logits[0, -1]).item())
+            if eos_id is not None and next_id == eos_id:
+                break
+            toks = torch.cat([toks, torch.tensor([[next_id]], device=device)], dim=1)
+            generated_ids.append(next_id)
+
+            text_after_prefix = model.tokenizer.decode(generated_ids)
+            if stop_on_punct and re.search(r'[.!]', text_after_prefix):
+                return re.split(r'[.!]', text_after_prefix, maxsplit=1)[0].strip()
+    
+    return model.tokenizer.decode(generated_ids).strip()
 
 
 def load_model(model_name: str, tokenizer_name: Optional[str] = None, device: Optional[str] = None):
@@ -207,8 +242,9 @@ def main():
             corr_q = best.get("question", "")
             answer = clean.get("answer", "")
             
-            # For chunk/tofu format, we concatenate question + answer as full sequence
-            full_clean = clean_q + answer
+            # For TOFU format, question already includes " Answer:" from corruption generation
+            # Just add a space before the answer
+            full_clean = clean_q + " " + answer
             # Use empty prefix and suffix for answer_pred_positions
             pref_c = clean_q
             suff_c = ""
@@ -258,8 +294,23 @@ def main():
         resid_results = [r for r in results if r["site"] == "resid_post"]
         top_resid = resid_results[0] if len(resid_results) > 0 else None
         
-        # Save each variant
-        for variant_name, top_result in [("overall", top_overall), ("mlp", top_mlp), ("resid", top_resid)]:
+        # Find last layer MLP (both input and output)
+        last_layer = model.cfg.n_layers - 1
+        last_mlp_in = [r for r in results if r["site"] == "mlp_in" and r["layer"] == last_layer]
+        last_mlp_out = [r for r in results if r["site"] == "mlp_post" and r["layer"] == last_layer]
+        top_last_mlp_in = last_mlp_in[0] if len(last_mlp_in) > 0 else None
+        top_last_mlp_out = last_mlp_out[0] if len(last_mlp_out) > 0 else None
+        
+        # Save each variant (including last layer MLP input and output)
+        variants = [
+            ("overall", top_overall), 
+            ("mlp", top_mlp), 
+            ("resid", top_resid),
+            ("last_mlp_in", top_last_mlp_in),
+            ("last_mlp_out", top_last_mlp_out),
+        ]
+        
+        for variant_name, top_result in variants:
             if top_result is None:
                 continue
             
@@ -274,6 +325,24 @@ def main():
                 "p_on": top_result["p_on"],
                 "p_off": top_result["p_off"],
             }
+            
+            # Generate answers for CSV summary
+            # Clean answer (no corruption, no patching)
+            gen_clean = greedy_generate_with_patching(model, clean_q + " ", max_new_tokens=100)
+            
+            # Corrupted answer (with corruption, no patching)
+            gen_corrupted = greedy_generate_with_patching(model, corr_q + " ", max_new_tokens=100)
+            
+            # Patched answer (with corruption + patching)
+            # Use the full hook_name from top_result (e.g., "blocks.5.hook_resid_post")
+            hook_name = top_result["hook_name"]
+            head_idx = top_result.get("head_idx")
+            pos_clean = answer_pred_positions(model, pref_c, answer)
+            pos_corr = answer_pred_positions(model, corr_q.split("___")[0] if "___" in corr_q else corr_q, answer)
+            patch_hook = make_patch_hook(clean_cache, hook_name, pos_clean, pos_corr, head_idx)
+            gen_patched = greedy_generate_with_patching(
+                model, corr_q + " ", max_new_tokens=100, hooks=[(hook_name, patch_hook)]
+            )
             
             tensor_path = os.path.join(out_root, f"{sid}_{variant_name}_top_site_act.pt")
             meta_path = os.path.join(out_root, f"{sid}_{variant_name}_top_site_meta.json")
@@ -290,15 +359,68 @@ def main():
                 "meta_path": os.path.abspath(meta_path),
                 "tensor_path": os.path.abspath(tensor_path),
                 "model": args.model,
+                "question": clean_q,
+                "original_answer": answer,
+                "generated_clean": gen_clean,
+                "generated_corrupted": gen_corrupted,
+                "generated_patched": gen_patched,
+                "fraction_restored": top_result["fraction_restored"],
             })
 
     samples_csv = os.path.join(out_root, "samples.csv")
     with open(samples_csv, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["sample_id", "variant", "meta_path", "tensor_path", "model"])
+        fieldnames = [
+            "sample_id", "variant", "meta_path", "tensor_path", "model",
+            "question", "original_answer", "generated_clean", "generated_corrupted",
+            "generated_patched", "fraction_restored"
+        ]
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for r in out_samples:
             writer.writerow(r)
     print(f"Wrote {len(out_samples)} samples to {samples_csv}")
+    
+    # Create separate CSVs for MLP, Resid, and Last Layer MLP variants
+    mlp_samples = [s for s in out_samples if s["variant"] == "mlp"]
+    resid_samples = [s for s in out_samples if s["variant"] == "resid"]
+    last_mlp_in_samples = [s for s in out_samples if s["variant"] == "last_mlp_in"]
+    last_mlp_out_samples = [s for s in out_samples if s["variant"] == "last_mlp_out"]
+    
+    if mlp_samples:
+        mlp_csv = os.path.join(out_root, "samples_mlp.csv")
+        with open(mlp_csv, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for r in mlp_samples:
+                writer.writerow(r)
+        print(f"Wrote {len(mlp_samples)} MLP samples to {mlp_csv}")
+    
+    if resid_samples:
+        resid_csv = os.path.join(out_root, "samples_resid.csv")
+        with open(resid_csv, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for r in resid_samples:
+                writer.writerow(r)
+        print(f"Wrote {len(resid_samples)} Resid samples to {resid_csv}")
+    
+    if last_mlp_in_samples:
+        last_mlp_in_csv = os.path.join(out_root, "samples_last_mlp_in.csv")
+        with open(last_mlp_in_csv, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for r in last_mlp_in_samples:
+                writer.writerow(r)
+        print(f"Wrote {len(last_mlp_in_samples)} Last MLP Input samples to {last_mlp_in_csv}")
+    
+    if last_mlp_out_samples:
+        last_mlp_out_csv = os.path.join(out_root, "samples_last_mlp_out.csv")
+        with open(last_mlp_out_csv, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for r in last_mlp_out_samples:
+                writer.writerow(r)
+        print(f"Wrote {len(last_mlp_out_samples)} Last MLP Output samples to {last_mlp_out_csv}")
 
 
 if __name__ == "__main__":

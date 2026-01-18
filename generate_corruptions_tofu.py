@@ -24,10 +24,62 @@ from transformer_lens import HookedTransformer
 from tqdm import tqdm
 
 
-def load_model(model_name: str, device: Optional[str] = None):
+def load_model(model_name: str, tokenizer_name: Optional[str] = None, device: Optional[str] = None):
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = HookedTransformer.from_pretrained(model_name, device=device)
+    if tokenizer_name is None:
+        tokenizer_name = model_name
+
+    # Load tokenizer as object first
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, use_fast=False)
+
+    # Check if model_name is a local path
+    if os.path.exists(model_name):
+        print(f"Loading model from local path: {model_name}")
+
+        # Load HuggingFace model first
+        hf_model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch.bfloat16,
+            device_map='auto'
+        )
+
+        # Determine the official model name for HookedTransformer
+        config_path = os.path.join(model_name, "config.json")
+        official_name = "meta-llama/Llama-2-7b-hf"  # default
+
+        if os.path.exists(config_path):
+            import json
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+
+            # Infer official model name from config
+            if config.get("model_type") == "llama":
+                hidden_size = config.get("hidden_size", 4096)
+                num_layers = config.get("num_hidden_layers", 32)
+
+                if hidden_size == 4096 and num_layers == 32:
+                    official_name = "meta-llama/Llama-2-7b-hf"
+                elif hidden_size == 5120 and num_layers == 40:
+                    official_name = "meta-llama/Llama-2-13b-hf"
+
+        print(f"Wrapping with HookedTransformer using architecture: {official_name}")
+
+        # Wrap with HookedTransformer
+        model = HookedTransformer.from_pretrained(
+            official_name,
+            hf_model=hf_model,
+            tokenizer=tokenizer,
+            fold_ln=False,
+            center_writing_weights=False,
+            center_unembed=False,
+        )
+    else:
+        # Load from HuggingFace Hub or official model name
+        print(f"Loading model from HuggingFace: {model_name}")
+        model = HookedTransformer.from_pretrained(model_name, tokenizer=tokenizer, device=device)
+
     return model, device
 
 
@@ -78,11 +130,12 @@ def avg_nll(model: HookedTransformer, text: str) -> float:
 def greedy_answer(
     model: HookedTransformer,
     question: str,
-    max_new_tokens: int = 50,
+    max_new_tokens: int = 100,
     stop_on_punct: bool = True,
 ):
     """Greedy decode an answer continuation and return as plain string (no BOS / EOS)."""
     device = model.cfg.device
+    # Question already includes "Answer:" from split_long_answer
     toks = model.to_tokens(question + " ", prepend_bos=True).to(device)
     eos_id = getattr(model.tokenizer, "eos_token_id", None)
     generated_ids = []
@@ -97,9 +150,9 @@ def greedy_answer(
             generated_ids.append(next_id)
 
             text_after_prefix = model.tokenizer.decode(generated_ids)
-            # Stop at first punctuation if requested
-            if stop_on_punct and re.search(r'[.!?;:"]', text_after_prefix):
-                return re.split(r'[.!?;:"]', text_after_prefix, maxsplit=1)[0].strip()
+            # Stop only at period or exclamation (not ? since questions end with ?)
+            if stop_on_punct and re.search(r'[.!]', text_after_prefix):
+                return re.split(r'[.!]', text_after_prefix, maxsplit=1)[0].strip()
     
     return model.tokenizer.decode(generated_ids).strip()
 
@@ -206,13 +259,14 @@ def split_long_answer(model: HookedTransformer, question: str, answer: str, thre
         answer_prefix = model.tokenizer.decode(answer_prefix_toks.tolist())
         answer_suffix = model.tokenizer.decode(answer_suffix_toks.tolist())
         
-        # Extend question with answer prefix
-        new_question = question + " " + answer_prefix
+        # Extend question with "Answer:" and answer prefix
+        new_question = question + " Answer: " + answer_prefix
         new_answer = answer_suffix
         
         return new_question, new_answer
     
-    return question, answer
+    # If not splitting, add "Answer:" to question for consistency
+    return question + " Answer:", answer
 
 
 def process_row(
@@ -296,7 +350,8 @@ def main():
     ap.add_argument("--csv", required=True, help="Input CSV with columns: question,answer")
     ap.add_argument("--out", required=True, help="Output CSV path for corruptions")
     ap.add_argument("--output_qa", default=None, help="Output CSV path for modified question/answer pairs (optional)")
-    ap.add_argument("--model", default="EleutherAI/pythia-1.4b", help="HookedTransformer model name")
+    ap.add_argument("--model", default="EleutherAI/pythia-1.4b", help="HookedTransformer model name or local path")
+    ap.add_argument("--tokenizer", default=None, help="Tokenizer name (defaults to model name)")
     ap.add_argument("--corruption", choices=["lm_single", "none"], default="lm_single")
 
     # Corruption hyperparams
@@ -307,7 +362,7 @@ def main():
     ap.add_argument("--min_effect_drop", type=float, default=0.08, help="Min required drop in avg log-prob (nats)")
 
     # Generation flags
-    ap.add_argument("--gen_max_tokens", type=int, default=50, help="Max tokens to greedily generate for answers")
+    ap.add_argument("--gen_max_tokens", type=int, default=100, help="Max tokens to greedily generate for answers")
     ap.add_argument("--no_stop_on_punct", action="store_true", help="Do not stop generation at punctuation")
 
     # Answer splitting options
@@ -317,7 +372,7 @@ def main():
     ap.add_argument("--limit", type=int, default=None, help="Process only first N rows")
     args = ap.parse_args()
 
-    model, device = load_model(args.model)
+    model, device = load_model(args.model, args.tokenizer)
     print(f"Loaded {args.model} on {device}")
 
     # Read input CSV

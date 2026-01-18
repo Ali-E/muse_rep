@@ -34,3 +34,11 @@ tofu_data/*
 finetuned_tofu_pythia_model/*
 results*.json
 fluency_results/*
+site_slices_mean_meta-llama_Meta-Llama-3-8B/*
+site_outputs_tofu_split_2p0x/*
+site_outputs_tofu_llama2/*
+site_outputs_tofu/*
+site_outputs/*
+ps_cross_dataset_outputs_mlp/*
+ps_cross_dataset_outputs/*
+finetuned_tofu_llama2_model/*

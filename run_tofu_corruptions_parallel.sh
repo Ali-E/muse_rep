@@ -1,9 +1,16 @@
 #!/bin/bash
 
 # Configuration
-MODEL="EleutherAI/pythia-1.4b"
+# MODEL="EleutherAI/pythia-1.4b"
+# MODEL="meta-llama/Llama-2-7b-hf"
+MODEL="/scratch/aebrahim/muse_rep/finetuned_tofu_llama2_model/"
+TOKENIZER="meta-llama/Llama-2-7b-hf"
 CSV_INPUT="tofu_data/tofu_full_train.csv"
-OUTPUT_DIR="corruptions_tofu"
+# CSV_INPUT="tofu_data/tofu_query.csv"
+# CSV_INPUT="tofu_data/tofu_full_sub.csv"
+# OUTPUT_DIR="corruptions_tofu"
+OUTPUT_DIR="corruptions_tofu_llama2"
+# OUTPUT_DIR="corruptions_tofu_llama2_query"
 
 # Corruption parameters
 CORRUPTION="lm_single"
@@ -15,15 +22,15 @@ MIN_EFFECT_DROP=0.08
 GEN_MAX_TOKENS=50
 
 # Answer splitting options (set to 1 to enable, 0 to disable)
-SPLIT_LONG_ANSWERS=1
+SPLIT_LONG_ANSWERS=0
 ANSWER_LENGTH_THRESHOLD=2.0
 
 # Optional: Limit number of input rows to process (set to 0 or leave empty to process all)
-LIMIT=400
+LIMIT=1000
 
 # Number of GPUs to use
-NUM_GPUS=2
-GPU_IDS=(1 3)  # Adjust based on your available GPUs
+NUM_GPUS=3
+GPU_IDS=(0 1 3)  # Adjust based on your available GPUs
 
 # Create output directory
 mkdir -p $OUTPUT_DIR
@@ -89,7 +96,7 @@ else
 fi
 
 # Build common arguments
-COMMON_ARGS="--corruption $CORRUPTION --model $MODEL --top_k $TOP_K --max_per_pos $MAX_PER_POS --max_total $MAX_TOTAL --fluency_tau $FLUENCY_TAU --min_effect_drop $MIN_EFFECT_DROP --gen_max_tokens $GEN_MAX_TOKENS"
+COMMON_ARGS="--corruption $CORRUPTION --model $MODEL --tokenizer $TOKENIZER --top_k $TOP_K --max_per_pos $MAX_PER_POS --max_total $MAX_TOTAL --fluency_tau $FLUENCY_TAU --min_effect_drop $MIN_EFFECT_DROP --gen_max_tokens $GEN_MAX_TOKENS"
 
 # Add split_long_answers flag if enabled
 if [ "$SPLIT_LONG_ANSWERS" -eq 1 ]; then
@@ -153,7 +160,7 @@ done
 echo ""
 echo "Merging output files..."
 python3 << EOF
-import pandas as pd
+import csv
 import glob
 import os
 
@@ -162,6 +169,8 @@ final_output = os.path.join(output_dir, "$OUTPUT_FILENAME")
 split_enabled = $SPLIT_LONG_ANSWERS
 input_csv = "$CSV_INPUT"
 final_qa_output = os.path.join(output_dir, "$OUTPUT_QA_FILENAME")
+num_gpus = $NUM_GPUS
+limit = $LIMIT
 
 # Find all output chunk files
 chunk_files = sorted(glob.glob(f"{output_dir}/output_chunk_*.csv"))
@@ -170,51 +179,140 @@ if not chunk_files:
     print("No output chunks found!")
     exit(1)
 
-# Read and concatenate all chunks
-dfs = []
+# Read and concatenate all chunks using csv module
+all_rows = []
+fieldnames = None
+
 for f in chunk_files:
     print(f"Reading {f}")
-    df = pd.read_csv(f)
-    dfs.append(df)
-    print(f"  Rows: {len(df)}")
+    with open(f, 'r', encoding='utf-8') as csvfile:
+        reader = csv.DictReader(csvfile)
+        if fieldnames is None:
+            fieldnames = reader.fieldnames
+        chunk_rows = list(reader)
+        all_rows.extend(chunk_rows)
+        print(f"  Rows: {len(chunk_rows)}")
 
-merged_df = pd.concat(dfs, ignore_index=True)
-merged_df.to_csv(final_output, index=False)
+# Fix duplicate IDs from GPU chunks by adding offset
+# The input CSV was split across GPUs, so each chunk processed different input rows
+# BUT the IDs in each chunk start from 0 (their local chunk index)
+# We need to offset based on which input rows each chunk processed
+if 'id' in fieldnames:
+    # Count input rows to determine offset
+    with open(input_csv, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        input_rows = list(reader)
+
+    if limit > 0:
+        total_input_rows = min(limit, len(input_rows))
+    else:
+        total_input_rows = len(input_rows)
+
+    rows_per_chunk = (total_input_rows + num_gpus - 1) // num_gpus
+
+    # Split all_rows back into chunks to apply offset
+    chunk_sizes = []
+    for f in chunk_files:
+        with open(f, 'r', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+            chunk_sizes.append(len(list(reader)))
+
+    # Apply offset to each chunk
+    row_idx = 0
+    for i, chunk_size in enumerate(chunk_sizes):
+        chunk_start_id = i * rows_per_chunk
+        for j in range(chunk_size):
+            all_rows[row_idx]['id'] = str(int(all_rows[row_idx]['id']) + chunk_start_id)
+            row_idx += 1
+
+    print(f"Fixed ID offsets across {len(chunk_files)} GPU chunks")
+    print(f"Input rows: {total_input_rows}, Rows per chunk: {rows_per_chunk}")
+
+    # Count unique IDs
+    unique_ids = len(set(r['id'] for r in all_rows))
+    id_values = [int(r['id']) for r in all_rows if r['id'].isdigit()]
+    if id_values:
+        print(f"Output ID range: {min(id_values)} to {max(id_values)}")
+        print(f"Unique IDs: {unique_ids}")
+
+# Write merged output
+with open(final_output, 'w', newline='', encoding='utf-8') as csvfile:
+    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(all_rows)
+
 print(f"\nMerged {len(chunk_files)} files into {final_output}")
-print(f"Total rows: {len(merged_df)}")
+print(f"Total rows: {len(all_rows)}")
 
 # If splitting was enabled, also merge the Q/A files and create modified input CSV
 if split_enabled:
     qa_files = sorted(glob.glob(f"{output_dir}/qa_chunk_*.csv"))
     if qa_files:
-        qa_dfs = []
+        # Read all Q/A chunks
+        all_qa_rows = []
+        qa_fieldnames = None
+        qa_chunk_sizes = []
+
         for f in qa_files:
             print(f"Reading {f}")
-            qa_dfs.append(pd.read_csv(f))
-        
-        merged_qa_df = pd.concat(qa_dfs, ignore_index=True)
-        merged_qa_df.to_csv(final_qa_output, index=False)
+            with open(f, 'r', encoding='utf-8') as csvfile:
+                reader = csv.DictReader(csvfile)
+                if qa_fieldnames is None:
+                    qa_fieldnames = reader.fieldnames
+                qa_chunk_rows = list(reader)
+                all_qa_rows.extend(qa_chunk_rows)
+                qa_chunk_sizes.append(len(qa_chunk_rows))
+
+        # Fix duplicate IDs from GPU chunks (same as corruptions)
+        if 'id' in qa_fieldnames:
+            row_idx = 0
+            for i, chunk_size in enumerate(qa_chunk_sizes):
+                chunk_start_id = i * rows_per_chunk
+                for j in range(chunk_size):
+                    all_qa_rows[row_idx]['id'] = str(int(all_qa_rows[row_idx]['id']) + chunk_start_id)
+                    row_idx += 1
+            print(f"Fixed Q/A ID offsets across {len(qa_files)} chunks")
+
+            id_values = [int(r['id']) for r in all_qa_rows if r['id'].isdigit()]
+            if id_values:
+                print(f"Q/A ID range: {min(id_values)} to {max(id_values)}")
+
+        # Write merged Q/A output
+        with open(final_qa_output, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=qa_fieldnames)
+            writer.writeheader()
+            writer.writerows(all_qa_rows)
+
         print(f"\nMerged {len(qa_files)} Q/A files into {final_qa_output}")
-        print(f"Total Q/A pairs: {len(merged_qa_df)}")
-        
+        print(f"Total Q/A pairs: {len(all_qa_rows)}")
+
         # Create a modified version of the input CSV with updated Q/A pairs
-        # Use only the 'question' and 'answer' columns from modified Q/A
-        input_df = pd.read_csv(input_csv)
-        limit = $LIMIT
+        # Read original input
+        with open(input_csv, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            input_fieldnames = reader.fieldnames
+            input_rows_orig = list(reader)
+
         if limit > 0:
-            input_df = input_df.iloc[:limit]
-        
-        # Create modified input CSV
-        modified_input_df = input_df.copy()
-        modified_input_df['question'] = merged_qa_df['question'].values
-        modified_input_df['answer'] = merged_qa_df['answer'].values
-        
+            input_rows_orig = input_rows_orig[:limit]
+
+        # Update question/answer columns
+        for i, row in enumerate(input_rows_orig):
+            if i < len(all_qa_rows):
+                row['question'] = all_qa_rows[i]['question']
+                row['answer'] = all_qa_rows[i]['answer']
+
         # Save modified input CSV
         basename = os.path.basename(input_csv)
         name_without_ext = os.path.splitext(basename)[0]
         threshold_str = "$ANSWER_LENGTH_THRESHOLD".replace('.', 'p')
         modified_input_path = os.path.join(output_dir, f"{name_without_ext}_modified_split_{threshold_str}x.csv")
-        modified_input_df.to_csv(modified_input_path, index=False)
+
+        with open(modified_input_path, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=input_fieldnames)
+            writer.writeheader()
+            writer.writerows(input_rows_orig)
+
         print(f"\nCreated modified input CSV: {modified_input_path}")
         print(f"  - Original columns preserved")
         print(f"  - question/answer columns updated with split versions")

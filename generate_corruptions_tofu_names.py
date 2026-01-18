@@ -77,11 +77,12 @@ def seq_avg_logprob(model: HookedTransformer, question: str, answer: str) -> flo
 def greedy_answer(
     model: HookedTransformer,
     question: str,
-    max_new_tokens: int = 50,
+    max_new_tokens: int = 100,
     stop_on_punct: bool = True,
 ):
     """Greedy decode an answer continuation and return as plain string."""
     device = model.cfg.device
+    # Question already includes "Answer:" from split_long_answer
     toks = model.to_tokens(question + " ", prepend_bos=True).to(device)
     eos_id = getattr(model.tokenizer, "eos_token_id", None)
     generated_ids = []
@@ -96,8 +97,9 @@ def greedy_answer(
             generated_ids.append(next_id)
 
             text_after_prefix = model.tokenizer.decode(generated_ids)
-            if stop_on_punct and re.search(r'[.!?;:"]', text_after_prefix):
-                return re.split(r'[.!?;:"]', text_after_prefix, maxsplit=1)[0].strip()
+            # Stop only at period or exclamation (not ? since questions end with ?)
+            if stop_on_punct and re.search(r'[.!]', text_after_prefix):
+                return re.split(r'[.!]', text_after_prefix, maxsplit=1)[0].strip()
     
     return model.tokenizer.decode(generated_ids).strip()
 
@@ -194,12 +196,14 @@ def split_long_answer(model: HookedTransformer, question: str, answer: str, thre
         answer_prefix = model.tokenizer.decode(answer_prefix_toks.tolist())
         answer_suffix = model.tokenizer.decode(answer_suffix_toks.tolist())
         
-        new_question = question + " " + answer_prefix
+        # Extend question with "Answer:" and answer prefix
+        new_question = question + " Answer: " + answer_prefix
         new_answer = answer_suffix
         
         return new_question, new_answer
     
-    return question, answer
+    # If not splitting, add "Answer:" to question for consistency
+    return question + " Answer:", answer
 
 
 def process_row(
@@ -292,7 +296,7 @@ def main():
     ap.add_argument("--min_effect_drop", type=float, default=0.0, help="Min required drop in avg log-prob (nats)")
 
     # Generation flags
-    ap.add_argument("--gen_max_tokens", type=int, default=50, help="Max tokens to greedily generate for answers")
+    ap.add_argument("--gen_max_tokens", type=int, default=100, help="Max tokens to greedily generate for answers")
     ap.add_argument("--no_stop_on_punct", action="store_true", help="Do not stop generation at punctuation")
 
     # Answer splitting options

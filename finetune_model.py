@@ -181,9 +181,27 @@ def finetune(
     dataset = load_data_files(data_files, use_tofu=use_tofu, tofu_subset=tofu_subset, tofu_split=tofu_split)
     print(f"Total examples: {len(dataset)}")
     
+    # Track truncation statistics
+    truncation_stats = {"truncated": 0, "total": 0, "lengths": []}
+    
     # Tokenization function
     def tokenize_function(examples):
-        # Tokenize the texts
+        # Tokenize without truncation first to measure lengths
+        untruncated = tokenizer(
+            examples["text"],
+            truncation=False,
+            padding=False,
+        )
+        
+        # Count truncations
+        for ids in untruncated["input_ids"]:
+            length = len(ids)
+            truncation_stats["lengths"].append(length)
+            truncation_stats["total"] += 1
+            if length > max_length:
+                truncation_stats["truncated"] += 1
+        
+        # Tokenize the texts with truncation
         result = tokenizer(
             examples["text"],
             truncation=True,
@@ -201,6 +219,22 @@ def finetune(
         remove_columns=dataset.column_names,
         desc="Tokenizing"
     )
+    
+    # Report truncation statistics
+    if truncation_stats["total"] > 0:
+        print(f"\n{'='*60}")
+        print(f"Tokenization Statistics (max_length={max_length})")
+        print(f"{'='*60}")
+        print(f"Total samples: {truncation_stats['total']}")
+        print(f"Truncated samples: {truncation_stats['truncated']} ({100*truncation_stats['truncated']/truncation_stats['total']:.1f}%)")
+        print(f"Within max_length: {truncation_stats['total']-truncation_stats['truncated']} ({100*(truncation_stats['total']-truncation_stats['truncated'])/truncation_stats['total']:.1f}%)")
+        lengths = truncation_stats["lengths"]
+        print(f"\nLength statistics:")
+        print(f"  Min: {min(lengths)}")
+        print(f"  Max: {max(lengths)}")
+        print(f"  Mean: {sum(lengths)/len(lengths):.1f}")
+        print(f"  Median: {sorted(lengths)[len(lengths)//2]}")
+        print(f"{'='*60}\n")
     
     # Use default data collator
     data_collator = default_data_collator
@@ -220,8 +254,9 @@ def finetune(
         save_strategy=save_strategy,
         logging_steps=logging_steps,
         bf16=bf16,
-        # Disable gradient checkpointing for HookedTransformer compatibility
-        gradient_checkpointing=False,
+        # Enable gradient checkpointing to save memory
+        gradient_checkpointing=True,
+        gradient_checkpointing_kwargs={"use_reentrant": False},  # Use newer, more efficient implementation
         report_to="none",  # Disable wandb
         save_total_limit=2,  # Keep only last 2 checkpoints
         ddp_find_unused_parameters=False,  # Disable for better performance
