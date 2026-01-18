@@ -31,9 +31,18 @@ TOKENIZER="meta-llama/Llama-2-7b-hf"
 # Source: Sites localized from tofu_corruptions.csv
 SOURCE_SAMPLES_CSV="site_outputs_tofu_llama2/samples.csv"
 
-# Target: Prompts and corruptions from tofu_query.csv
+# Target format: "tofu" for question/answer pairs, "chunk" for chunk format
+# - tofu: Uses TARGET_PROMPTS_CSV (id,question,answer) and TARGET_CORRUPTIONS_CSV (id,question,answer,corruption)
+# - chunk: Uses only TARGET_CORRUPTIONS_CSV (chunk_id,question,answer,corruption) - prompts are derived from corruptions
+TARGET_FORMAT="tofu"
+
+# Target: Prompts and corruptions from tofu_query.csv (for tofu format)
 TARGET_PROMPTS_CSV="tofu_data/tofu_query_with_ids.csv"
 TARGET_CORRUPTIONS_CSV="corruptions_tofu_llama2_query/tofu_corruptions.csv"
+
+# Target: Corruptions for chunk format (uncomment to use chunk format)
+# TARGET_FORMAT="chunk"
+# TARGET_CORRUPTIONS_CSV="corruptions_tofu_paragraphs/chunk_corruptions_final.csv"
 
 # Output directory (will be suffixed with site type if not "all")
 OUTPUT_DIR="ps_cross_dataset_outputs"
@@ -70,7 +79,10 @@ echo "Configuration:"
 echo "  Model: $MODEL"
 echo "  Source Samples (sites): $SOURCE_SAMPLES_CSV"
 echo "  Site Types: ${SITE_TYPES[@]:-'(using variant from samples.csv)'}"
-echo "  Target Prompts: $TARGET_PROMPTS_CSV"
+echo "  Target Format: $TARGET_FORMAT"
+if [ "$TARGET_FORMAT" = "tofu" ]; then
+    echo "  Target Prompts: $TARGET_PROMPTS_CSV"
+fi
 echo "  Target Corruptions: $TARGET_CORRUPTIONS_CSV"
 echo "  Output Directory: $OUTPUT_DIR"
 echo "  Using $NUM_GPUS GPUs: ${GPU_IDS[@]}"
@@ -174,13 +186,19 @@ for i in $(seq 0 $(($NUM_GPUS - 1))); do
             --model $MODEL \
             --tokenizer $TOKENIZER \
             --source_samples_csv $SUBSET_SAMPLES \
-            --target_prompts_csv $TARGET_PROMPTS_CSV \
             --target_corruptions_csv $TARGET_CORRUPTIONS_CSV \
             --out_agg_csv ${OUTPUT_DIR}/gpu_${i}_agg${FILE_SUFFIX}.csv \
             --out_detailed_csv ${OUTPUT_DIR}/gpu_${i}_detailed${FILE_SUFFIX}.csv \
             --out_ranked_csv ${OUTPUT_DIR}/gpu_${i}_ranked${FILE_SUFFIX}.csv \
-            --eps $EPS \
-            --tofu_format"
+            --eps $EPS"
+
+        # Add format-specific options
+        if [ "$TARGET_FORMAT" = "chunk" ]; then
+            CMD="$CMD --chunk_format"
+        else
+            # tofu format: add prompts CSV and tofu_format flag
+            CMD="$CMD --target_prompts_csv $TARGET_PROMPTS_CSV --tofu_format"
+        fi
 
         # Add site_type if specified
         if [ -n "$SITE_TYPE" ]; then

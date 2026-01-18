@@ -31,36 +31,65 @@ def load_model(model_name: str, tokenizer_name: Optional[str] = None, device: Op
         device = "cuda" if torch.cuda.is_available() else "cpu"
     if tokenizer_name is None:
         tokenizer_name = model_name
-    
-    # Load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, use_fast=False)
-    
+
+    # Load tokenizer - try slow tokenizer first, fall back to fast if not available
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, use_fast=False)
+    except ValueError:
+        # Some models (like GPTNeoX/Pythia) only have fast tokenizers
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+
     # Check if model_name is a local path
     if os.path.exists(model_name):
         print(f"Loading model from local path: {model_name}")
-        
+
         # Load HuggingFace model first
         hf_model = AutoModelForCausalLM.from_pretrained(
             model_name,
             torch_dtype=torch.bfloat16,
             device_map='auto'
         )
-        
+
         # Determine the official model name for HookedTransformer
         config_path = os.path.join(model_name, "config.json")
-        official_name = "meta-llama/Llama-2-7b-hf"  # default
-        
+        official_name = None
+
         if os.path.exists(config_path):
+            import json
             with open(config_path, 'r') as f:
-                import json
                 config = json.load(f)
-            
+
+            model_type = config.get("model_type")
+
             # Infer official model name from config
-            if config.get("model_type") == "llama":
-                official_name = "meta-llama/Llama-2-7b-hf"
-        
+            if model_type == "llama":
+                hidden_size = config.get("hidden_size", 4096)
+                num_layers = config.get("num_hidden_layers", 32)
+                if hidden_size == 4096 and num_layers == 32:
+                    official_name = "meta-llama/Llama-2-7b-hf"
+                elif hidden_size == 5120 and num_layers == 40:
+                    official_name = "meta-llama/Llama-2-13b-hf"
+                else:
+                    official_name = "meta-llama/Llama-2-7b-hf"
+            elif model_type == "gpt_neox":
+                hidden_size = config.get("hidden_size", 2048)
+                num_layers = config.get("num_hidden_layers", 24)
+                if hidden_size == 2048 and num_layers == 24:
+                    official_name = "EleutherAI/pythia-1.4b"
+                elif hidden_size == 2560 and num_layers == 32:
+                    official_name = "EleutherAI/pythia-2.8b"
+                elif hidden_size == 4096 and num_layers == 32:
+                    official_name = "EleutherAI/pythia-6.9b"
+                elif hidden_size == 5120 and num_layers == 36:
+                    official_name = "EleutherAI/pythia-12b"
+                else:
+                    official_name = "EleutherAI/pythia-1.4b"
+
+        if official_name is None:
+            official_name = "meta-llama/Llama-2-7b-hf"  # default fallback
+
         print(f"Wrapping with HookedTransformer using architecture: {official_name}")
-        
+
         # Wrap with HookedTransformer
         model = HookedTransformer.from_pretrained(
             official_name,
@@ -74,7 +103,7 @@ def load_model(model_name: str, tokenizer_name: Optional[str] = None, device: Op
         # Load from HuggingFace Hub or official model name
         print(f"Loading model from HuggingFace: {model_name}")
         model = HookedTransformer.from_pretrained(model_name, tokenizer=tokenizer, device=device)
-    
+
     return model
 
 
@@ -83,11 +112,15 @@ def load_csv(path: str) -> List[Dict[str, str]]:
         return list(csv.DictReader(f))
 
 
-def best_corruption_by_id(rows: List[Dict[str, str]]) -> Dict[str, Dict[str, str]]:
-    """Get best (most impactful) corruption per ID from target corruptions."""
+def best_corruption_by_id(rows: List[Dict[str, str]], chunk_format: bool = False) -> Dict[str, Dict[str, str]]:
+    """Get best (most impactful) corruption per ID from target corruptions.
+
+    For chunk_format, uses chunk_id instead of id.
+    """
     best: Dict[str, Dict[str, str]] = {}
+    id_field = "chunk_id" if chunk_format else "id"
     for r in rows:
-        tid = str(r.get("id", ""))
+        tid = str(r.get(id_field, ""))
         if r.get("corruption") != "lm_single":
             continue
         try:
@@ -119,8 +152,8 @@ def main():
     )
     ap.add_argument(
         "--target_prompts_csv",
-        required=True,
-        help="Target prompts CSV with id,question,answer (prompts to evaluate on)",
+        default=None,
+        help="Target prompts CSV with id,question,answer (prompts to evaluate on). Required for tofu format, not used for chunk format.",
     )
     ap.add_argument(
         "--target_corruptions_csv",
@@ -137,9 +170,15 @@ def main():
     ap.add_argument("--eps", type=float, default=1e-6, help="Epsilon for numerical stability")
     ap.add_argument("--tofu_format", action="store_true",
                     help="Use TOFU format (question+answer columns, no blanks)")
+    ap.add_argument("--chunk_format", action="store_true",
+                    help="Use chunk format (target prompts have id,text columns; corruptions have chunk_id,question,answer)")
     ap.add_argument("--average_last_mlp", action="store_true",
                     help="For last_mlp_in/last_mlp_out sites: average with corrupted activations instead of replacing")
     args = ap.parse_args()
+
+    # Validate arguments
+    if not args.chunk_format and args.target_prompts_csv is None:
+        ap.error("--target_prompts_csv is required when not using --chunk_format")
 
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
     model = load_model(args.model, args.tokenizer, device)
@@ -147,16 +186,51 @@ def main():
     plain_runner = plain_runner_factory(model)
 
     # Load target prompts and corruptions
-    target_prompts = load_csv(args.target_prompts_csv)
-    target_corr_rows = load_csv(args.target_corruptions_csv)
-    best_target_corr = best_corruption_by_id(target_corr_rows)
-    
+    if args.chunk_format:
+        # For chunk format, prompts come from the corruptions CSV itself
+        # Each chunk_id has question/answer from the corruptions
+        target_corr_rows = load_csv(args.target_corruptions_csv)
+        best_target_corr = best_corruption_by_id(target_corr_rows, chunk_format=True)
+
+        # Build target_prompts from the "none" corruptions (clean prompts)
+        # or from the best corruptions if no "none" entries exist
+        target_prompts = []
+        seen_ids = set()
+        for r in target_corr_rows:
+            tid = str(r.get("chunk_id", ""))
+            if tid in seen_ids:
+                continue
+            if r.get("corruption") == "none":
+                seen_ids.add(tid)
+                target_prompts.append({
+                    "id": tid,
+                    "question": r.get("question", ""),
+                    "answer": r.get("answer", ""),
+                })
+        # If no "none" corruptions, use the best corruptions for clean q/a
+        if not target_prompts:
+            for tid, corr in best_target_corr.items():
+                # Note: For chunk format, the "none" entry has clean q/a
+                # We need to get that from the corruptions list
+                for r in target_corr_rows:
+                    if str(r.get("chunk_id", "")) == tid and r.get("corruption") == "none":
+                        target_prompts.append({
+                            "id": tid,
+                            "question": r.get("question", ""),
+                            "answer": r.get("answer", ""),
+                        })
+                        break
+    else:
+        target_prompts = load_csv(args.target_prompts_csv)
+        target_corr_rows = load_csv(args.target_corruptions_csv)
+        best_target_corr = best_corruption_by_id(target_corr_rows, chunk_format=False)
+
     if args.limit is not None:
         target_prompts = target_prompts[: args.limit]
 
     # Load source samples (sites to evaluate)
     source_samples = load_csv(args.source_samples_csv)
-    
+
     print(f"Loaded {len(source_samples)} source samples (sites)")
     print(f"Loaded {len(target_prompts)} target prompts")
     print(f"Loaded {len(best_target_corr)} target corruptions")
@@ -188,8 +262,8 @@ def main():
             print(f"Warning: Empty corrupted question for target prompt id={tid}")
             continue
 
-        # TOFU format: no blanks, question is just prefix
-        if args.tofu_format:
+        # TOFU/chunk format: no blanks, question is just prefix
+        if args.tofu_format or args.chunk_format:
             pref = q
             suff = ""
             pref_c = qc
