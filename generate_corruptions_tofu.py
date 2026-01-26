@@ -85,12 +85,11 @@ def load_model(model_name: str, tokenizer_name: Optional[str] = None, device: Op
 
         print(f"Wrapping with HookedTransformer using architecture: {official_name}")
 
-        # Load HuggingFace model
+        # Load HuggingFace model to specific device (not device_map='auto' which creates meta tensors)
         hf_model = AutoModelForCausalLM.from_pretrained(
             model_name,
             torch_dtype=torch.bfloat16,
-            device_map='auto'
-        )
+        ).to(device)
 
         # Wrap with HookedTransformer
         model = HookedTransformer.from_pretrained(
@@ -257,6 +256,224 @@ def lm_single_token_proposals(
     return proposals[:max_total]
 
 
+def _lm_single_token_proposals_excluding_positions(
+    model: HookedTransformer,
+    question_text: str,
+    exclude_positions: set,
+    top_k: int = 50,
+    max_per_pos: int = 10,
+    max_total: int = 10,
+    fluency_tau: float = 0.8,
+) -> List[Dict]:
+    """
+    Like lm_single_token_proposals but skips positions in exclude_positions.
+    Used for chained corruptions to avoid corrupting the same position twice.
+    """
+    toks = model.to_tokens(question_text, prepend_bos=True)
+    str_toks = model.to_str_tokens(question_text, prepend_bos=True)
+    base_nll = avg_nll(model, question_text)
+    V = model.cfg.d_vocab
+
+    proposals = []
+    # Iterate all token positions except BOS (index 0)
+    for j in range(1, toks.shape[1]):
+        # Skip already-corrupted positions
+        if j in exclude_positions:
+            continue
+
+        orig_id = int(toks[0, j].item())
+        orig_str = str_toks[j]
+
+        # Distribution for token j based on left prefix only
+        prefix = toks[:, :j]
+        with torch.no_grad():
+            logits = model(prefix)
+        cand_logits = logits[0, -1]
+        k = min(top_k, V)
+        top_vals, top_ids = torch.topk(cand_logits, k=k)
+
+        taken_here = 0
+        for alt_id in top_ids.tolist():
+            if alt_id == orig_id:
+                continue
+
+            # Decode the alternative token
+            alt_token_str = model.tokenizer.decode([alt_id])
+
+            # Skip whitespace and punctuation tokens
+            if alt_token_str.strip() in ['', '.', '!', '?', ',', ';', ':', '"', "'", '-', '—', '–', '(', ')', '[', ']', '{', '}', '/', '\\', '|', '@', '#', '$', '%', '^', '&', '*', '+', '=', '<', '>', '~', '`']:
+                continue
+
+            # Skip if token is only whitespace
+            if not alt_token_str.strip():
+                continue
+
+            new_toks = toks.clone()
+            new_toks[0, j] = alt_id
+            # decode without BOS token
+            new_q = model.tokenizer.decode(new_toks[0, 1:].tolist())
+
+            # Fluency filter
+            nll = avg_nll(model, new_q)
+            if nll - base_nll > fluency_tau:
+                continue
+
+            proposals.append({
+                "pos": j,
+                "orig_token": orig_str,
+                "alt_token": alt_token_str,
+                "new_question": new_q,
+                "nll_increase": nll - base_nll,
+            })
+            taken_here += 1
+            if taken_here >= max_per_pos:
+                break
+
+        if len(proposals) >= max_total:
+            break
+
+    return proposals[:max_total]
+
+
+def lm_chained_corruptions(
+    model: HookedTransformer,
+    question_text: str,
+    answer: str,
+    num_corruptions: int = 2,
+    top_k: int = 50,
+    max_per_pos: int = 5,
+    max_candidates_per_step: int = 10,
+    fluency_tau: float = 0.8,
+    min_effect_drop: float = 0.0,
+    beam_width: int = 1,
+) -> List[Dict]:
+    """
+    Generate chained corruptions using beam search to explore multiple paths.
+
+    At each step:
+    1. For each beam (corruption path), find candidate single-token corruptions
+    2. Score each by how much it decreases answer log-prob
+    3. Keep the top beam_width paths across all beams
+    4. Repeat until we reach num_corruptions
+
+    Args:
+        model: The language model
+        question_text: Original clean question
+        answer: The answer text (for scoring)
+        num_corruptions: Number of corruptions to chain (e.g., 2 means corrupt 2 tokens)
+        top_k: Top-k alternatives to consider per position
+        max_per_pos: Max candidates to keep per position
+        max_candidates_per_step: Max candidates to evaluate per step per beam
+        fluency_tau: Max allowed NLL increase for fluency
+        min_effect_drop: Minimum drop required (not enforced during beam search, only for final selection)
+        beam_width: Number of paths to keep at each step (1 = greedy, >1 = beam search)
+
+    Returns:
+        List of chained corruption results, each with all positions/tokens that were corrupted
+    """
+    base_avg_lp = seq_avg_logprob(model, question_text, answer)
+
+    # Each beam is a tuple: (current_question, avg_logprob, positions, orig_tokens, alt_tokens, corrupted_positions_set)
+    # Initialize with the clean question
+    beams = [(
+        question_text,  # current_question
+        base_avg_lp,    # avg_logprob
+        [],             # positions
+        [],             # orig_tokens
+        [],             # alt_tokens
+        set(),          # corrupted_positions_set
+    )]
+
+    # Store results at each step (best beam's result after each corruption count)
+    all_step_results = {}  # step -> list of beam results
+
+    for step in range(num_corruptions):
+        # Expand all beams
+        all_candidates = []
+
+        for beam in beams:
+            current_question, current_avg_lp, positions, orig_tokens, alt_tokens, corrupted_positions_set = beam
+
+            # Get proposals for this beam's current question
+            props = _lm_single_token_proposals_excluding_positions(
+                model=model,
+                question_text=current_question,
+                exclude_positions=corrupted_positions_set,
+                top_k=top_k,
+                max_per_pos=max_per_pos,
+                max_total=max_candidates_per_step,
+                fluency_tau=fluency_tau,
+            )
+
+            if not props:
+                # This beam can't be extended further
+                continue
+
+            # Score each proposal
+            for p in props:
+                new_avg_lp = seq_avg_logprob(model, p["new_question"], answer)
+                total_delta = new_avg_lp - base_avg_lp  # Total drop from original
+
+                # Create new beam state
+                new_positions = positions + [p["pos"]]
+                new_orig_tokens = orig_tokens + [p["orig_token"]]
+                new_alt_tokens = alt_tokens + [p["alt_token"]]
+                new_corrupted_set = corrupted_positions_set | {p["pos"]}
+
+                all_candidates.append({
+                    "current_question": p["new_question"],
+                    "avg_logprob": new_avg_lp,
+                    "positions": new_positions,
+                    "orig_tokens": new_orig_tokens,
+                    "alt_tokens": new_alt_tokens,
+                    "corrupted_positions_set": new_corrupted_set,
+                    "total_delta": total_delta,
+                    "nll_increase": p["nll_increase"],
+                })
+
+        if not all_candidates:
+            # No beams could be extended
+            break
+
+        # Sort by total_delta (most negative = best) and keep top beam_width
+        all_candidates.sort(key=lambda x: x["total_delta"])
+        top_candidates = all_candidates[:beam_width]
+
+        # Update beams for next iteration
+        beams = [
+            (c["current_question"], c["avg_logprob"], c["positions"],
+             c["orig_tokens"], c["alt_tokens"], c["corrupted_positions_set"])
+            for c in top_candidates
+        ]
+
+        # Store results for this step (from all top candidates, but we'll use the best one)
+        step_results = []
+        for c in top_candidates:
+            step_results.append({
+                "num_corruptions": step + 1,
+                "positions": c["positions"],
+                "orig_tokens": c["orig_tokens"],
+                "alt_tokens": c["alt_tokens"],
+                "new_question": c["current_question"],
+                "avg_logprob": c["avg_logprob"],
+                "delta_from_clean": c["total_delta"],
+                "nll_increase": c["nll_increase"],
+            })
+        all_step_results[step + 1] = step_results
+
+    # Return the best chain at each step length
+    # For each step, pick the result with the best (most negative) delta
+    results = []
+    for step in sorted(all_step_results.keys()):
+        step_results = all_step_results[step]
+        if step_results:
+            # Pick the best result for this step
+            best = min(step_results, key=lambda x: x["delta_from_clean"])
+            results.append(best)
+
+    return results
+
+
 def clean_text(x: str) -> str:
     # Keep inner spaces; trim only ends
     return x.strip()
@@ -332,7 +549,52 @@ def process_row(
     if corruption == "none":
         return results
 
+    # Check if we should use chained corruptions
+    num_chain = getattr(args, 'num_chained_corruptions', 1)
+
+    if corruption == "lm_single" and num_chain > 1:
+        # Use chained corruptions
+        chained_results = lm_chained_corruptions(
+            model=model,
+            question_text=question,
+            answer=answer,
+            num_corruptions=num_chain,
+            top_k=args.top_k,
+            max_per_pos=args.max_per_pos,
+            max_candidates_per_step=args.max_total,
+            fluency_tau=args.fluency_tau,
+            min_effect_drop=args.min_effect_drop,
+            beam_width=getattr(args, 'beam_width', 1),
+        )
+
+        # Convert chained results to output format
+        for cr in chained_results:
+            # Format positions and tokens as semicolon-separated strings
+            positions_str = ";".join(str(p) for p in cr["positions"])
+            orig_tokens_str = ";".join(cr["orig_tokens"])
+            alt_tokens_str = ";".join(cr["alt_tokens"])
+
+            gen_ans_corr = greedy_answer(model, cr["new_question"], args.gen_max_tokens, not args.no_stop_on_punct)
+            corruption_type = f"lm_chain_{cr['num_corruptions']}"
+
+            results.append({
+                "id": row_id,
+                "corruption": corruption_type,
+                "position": positions_str,
+                "orig_token": orig_tokens_str,
+                "alt_token": alt_tokens_str,
+                "question": cr["new_question"],
+                "answer": answer,
+                "avg_logprob": cr["avg_logprob"],
+                "delta_from_clean": cr["delta_from_clean"],
+                "prompt_avg_nll_increase": cr["nll_increase"],
+                "generated_answer": gen_ans_corr,
+            })
+
+        return results
+
     if corruption == "lm_single":
+        # Original single-token corruption logic
         props = lm_single_token_proposals(
             model=model,
             question_text=question,
@@ -394,6 +656,18 @@ def main():
     # Answer splitting options
     ap.add_argument("--split_long_answers", action="store_true", help="Split long answers and extend questions when answer is too long")
     ap.add_argument("--answer_length_threshold", type=float, default=2.0, help="Split answers longer than this multiple of question length (default: 2.0)")
+
+    # Chained corruptions
+    ap.add_argument("--num_chained_corruptions", type=int, default=1,
+                    help="Number of tokens to corrupt in a chain. 1=single token (default), "
+                         "2+=chained corruptions where each subsequent corruption is found "
+                         "on the already-corrupted question. Output includes intermediate results "
+                         "(e.g., after 1 corruption, after 2 corruptions, etc.)")
+    ap.add_argument("--beam_width", type=int, default=1,
+                    help="Beam width for chained corruptions. 1=greedy (default), "
+                         ">1=beam search that explores multiple corruption paths and keeps "
+                         "the top beam_width paths at each step. Higher values find better chains "
+                         "but are slower (e.g., 3-5 is a good balance).")
 
     ap.add_argument("--limit", type=int, default=None, help="Process only first N rows")
     args = ap.parse_args()

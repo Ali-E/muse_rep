@@ -25,27 +25,38 @@
 
 # Configuration
 # MODEL="meta-llama/Llama-2-7b-hf"
-MODEL="/scratch/aebrahim/muse_rep/finetuned_tofu_llama2_model/"
+
+MODEL="/home/ae20/muse_data/finetuned_tofu_llama2_jan22/"
 TOKENIZER="meta-llama/Llama-2-7b-hf"
+# MODEL="EleutherAI/pythia-1.4b"
+# TOKENIZER="EleutherAI/pythia-1.4b"
 
 # Source: Sites localized from tofu_corruptions.csv
-SOURCE_SAMPLES_CSV="site_outputs_tofu_llama2/samples.csv"
+# SOURCE_SAMPLES_CSV="site_outputs_tofu_llama2/samples_sub.csv"
+SOURCE_SAMPLES_CSV="site_outputs_tofu_llama2_sub/samples.csv"
 
 # Target format: "tofu" for question/answer pairs, "chunk" for chunk format
 # - tofu: Uses TARGET_PROMPTS_CSV (id,question,answer) and TARGET_CORRUPTIONS_CSV (id,question,answer,corruption)
 # - chunk: Uses only TARGET_CORRUPTIONS_CSV (chunk_id,question,answer,corruption) - prompts are derived from corruptions
 TARGET_FORMAT="chunk"
+# TARGET_FORMAT="tofu"
 
 # Target: Prompts and corruptions from tofu_query.csv (for tofu format)
-TARGET_PROMPTS_CSV="tofu_data/authors_paragraphs_short.csv"
-TARGET_CORRUPTIONS_CSV="corruptions_tofu_paragraphs/chunk_corruptions_short.csv"
+# TARGET_PROMPTS_CSV="tofu_data/authors_paragraphs_final.csv"
+TARGET_PROMPTS_CSV="tofu_data/authors_paragraphs_short_sub.csv"
+# TARGET_PROMPTS_CSV="tofu_data/tofu_query_with_ids.csv"
+# TARGET_CORRUPTIONS_CSV="corruptions_tofu_paragraphs/chunk_corruptions_short_sub.csv"
+TARGET_CORRUPTIONS_CSV="corruptions_tofu_llama2_short_sub/chunk_corruptions.csv"
+# TARGET_CORRUPTIONS_CSV="corruptions_tofu_query/tofu_corruptions.csv"
 
 # Target: Corruptions for chunk format (uncomment to use chunk format)
 # TARGET_FORMAT="chunk"
 # TARGET_CORRUPTIONS_CSV="corruptions_tofu_paragraphs/chunk_corruptions_final.csv"
 
 # Output directory (will be suffixed with site type if not "all")
-OUTPUT_DIR="ps_cross_dataset_outputs"
+# OUTPUT_DIR="ps_cross_dataset_outputs_short"
+# OUTPUT_DIR="ps_cross_dataset_outputs_short_sub"
+OUTPUT_DIR="ps_cross_dataset_outputs_short_sub"
 
 # Computation parameters
 EPS=1e-6
@@ -63,11 +74,11 @@ EPS=1e-6
 SITE_TYPES=("mlp" "resid" "overall")  # List of site types to process
 
 # Optional: Limit number of source samples to process (set to 0 to process all)
-LIMIT=0
+LIMIT=10
 
 # Number of GPUs to use
-NUM_GPUS=3
-GPU_IDS=(0 1 3)  # Adjust based on your available GPUs
+NUM_GPUS=2
+GPU_IDS=(2 3)  # Adjust based on your available GPUs
 
 # Create output directory
 mkdir -p $OUTPUT_DIR
@@ -191,6 +202,7 @@ for i in $(seq 0 $(($NUM_GPUS - 1))); do
             --out_detailed_csv ${OUTPUT_DIR}/gpu_${i}_detailed${FILE_SUFFIX}.csv \
             --out_ranked_csv ${OUTPUT_DIR}/gpu_${i}_ranked${FILE_SUFFIX}.csv \
             --out_avg_ranked_csv ${OUTPUT_DIR}/gpu_${i}_avg_ranked${FILE_SUFFIX}.csv \
+            --num_answer_positions 3 \
             --eps $EPS"
 
         # Add format-specific options

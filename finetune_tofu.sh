@@ -4,12 +4,14 @@
 # Usage: bash finetune_tofu.sh
 
 # Configuration
-# MODEL="EleutherAI/pythia-1.4b"
-# TOKENIZER="EleutherAI/pythia-1.4b"
-MODEL="meta-llama/Llama-2-7b-hf"
-TOKENIZER="meta-llama/Llama-2-7b-hf"
+MODEL="EleutherAI/pythia-1.4b"
+TOKENIZER="EleutherAI/pythia-1.4b"
+# MODEL="meta-llama/Llama-2-7b-hf"
+# TOKENIZER="meta-llama/Llama-2-7b-hf"
+
 # OUT_DIR="./finetuned_tofu_pythia_model"
-OUT_DIR="./finetuned_tofu_llama2_model"
+# OUT_DIR="/home/ae20/muse_data/finetuned_tofu_llama2_jan22"
+OUT_DIR="/home/ae20/muse_data/finetuned_tofu_pythia_jan22"
 
 # TOFU dataset settings
 TOFU_SUBSET="full"  # Options: "full", "forget01", "forget05", "forget10"
@@ -17,7 +19,7 @@ TOFU_SPLIT="train"  # Options: "train", "validation", "test"
 
 # GPU configuration
 NUM_GPUS=2  # Number of GPUs to use
-GPU_IDS="1,3"  # Comma-separated GPU IDs
+GPU_IDS="0,2"  # Comma-separated GPU IDs
 
 # MUSE paper hyperparameters (adjusted for Pythia-1.4b)
 # Effective batch size = 32 (per_device_batch_size * num_gpus * grad_accum_steps)
@@ -27,12 +29,21 @@ GPU_IDS="1,3"  # Comma-separated GPU IDs
 # BATCH_SIZE=4  # Per device batch size (4 per GPU * 2 GPUs * 4 grad_accum = 32 effective)
 # GRAD_ACCUM=4
 
-EPOCHS=5      # Reduced from 5 to avoid overfitting on smaller model
-LR=1e-5       # Increased from 1e-5 for faster convergence on smaller model
-BATCH_SIZE=2  # Per device batch size (reduced to 1 to save memory)
-GRAD_ACCUM=4  # Increased to maintain effective batch size of 16 (1*2*8)
+# Hyperparameters for TOFU memorization (Pythia-1.4b)
+# Goal: Get the model to fully memorize the Q&A facts
+EPOCHS=8      # More epochs = better memorization
+LR=2e-5       # Moderate LR for stable learning
+BATCH_SIZE=2  # Smaller batch = more parameter updates per epoch
+GRAD_ACCUM=8  # Effective batch size = 2 * 2 GPUs * 8 = 32
+WARMUP=100    # Standard warmup for stability
+WEIGHT_DECAY=0.005  # Lower weight decay allows more memorization
 
-MAX_LENGTH=1024  # Reduced from 2048 to save memory
+MAX_LENGTH=512  # TOFU Q&A pairs are short (~50-100 tokens), 512 is plenty
+
+# Short answer memorization settings
+# Repeat short answers N times in training to improve memorization
+REPEAT_SHORT_ANSWERS=3  # Repeat short answers 3x (set to 1 to disable)
+SHORT_ANSWER_THRESHOLD=50  # Answers <= 50 chars are considered "short"
 
 # Run fine-tuning on TOFU dataset with multi-GPU support
 CUDA_VISIBLE_DEVICES=${GPU_IDS} torchrun \
@@ -49,7 +60,11 @@ CUDA_VISIBLE_DEVICES=${GPU_IDS} torchrun \
     --lr ${LR} \
     --batch_size ${BATCH_SIZE} \
     --grad_accum_steps ${GRAD_ACCUM} \
-    --max_length ${MAX_LENGTH}
+    --max_length ${MAX_LENGTH} \
+    --warmup_steps ${WARMUP} \
+    --weight_decay ${WEIGHT_DECAY} \
+    --repeat_short_answers ${REPEAT_SHORT_ANSWERS} \
+    --short_answer_threshold ${SHORT_ANSWER_THRESHOLD}
 
 echo ""
 echo "Fine-tuning complete!"

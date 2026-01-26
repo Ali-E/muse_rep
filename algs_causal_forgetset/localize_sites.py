@@ -160,7 +160,8 @@ def unique_ids(rows: List[Dict[str, str]]) -> List[str]:
 
 def pick_clean_and_best_corr(rows: List[Dict[str, str]]) -> Tuple[Dict[str, str], Optional[Dict[str, str]]]:
     """Pick clean baseline and best corruption from rows.
-    Works with both generate_corruptions.py and generate_chunk_corruptions.py output."""
+    Works with both generate_corruptions.py and generate_chunk_corruptions.py output.
+    Accepts both single-token (lm_single) and chained (lm_chain_*) corruptions."""
     clean = None
     for r in rows:
         if r.get("corruption") == "none":
@@ -171,7 +172,9 @@ def pick_clean_and_best_corr(rows: List[Dict[str, str]]) -> Tuple[Dict[str, str]
     best = None
     best_val = 0.0
     for r in rows:
-        if r.get("corruption") == "lm_single":
+        corruption_type = r.get("corruption", "")
+        # Accept lm_single and lm_chain_* corruptions
+        if corruption_type == "lm_single" or corruption_type.startswith("lm_chain"):
             try:
                 d = float(r.get("delta_from_clean", 0.0))
             except Exception:

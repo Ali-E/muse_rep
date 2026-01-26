@@ -2,14 +2,17 @@
 
 # Configuration
 # MODEL="EleutherAI/pythia-1.4b"
+MODEL="/home/ae20/muse_data/finetuned_tofu_llama2_jan22/"
 # MODEL="meta-llama/Llama-2-7b-hf"
-MODEL="/scratch/aebrahim/muse_rep/finetuned_tofu_llama2_model/"
+# MODEL="/scratch/aebrahim/muse_rep/finetuned_tofu_llama2_model/"
+# MODEL="/home/ae20/muse_data/finetuned_tofu_pythia_model/"
 TOKENIZER="meta-llama/Llama-2-7b-hf"
-CSV_INPUT="tofu_data/tofu_full_train.csv"
-# CSV_INPUT="tofu_data/tofu_query.csv"
-# CSV_INPUT="tofu_data/tofu_full_sub.csv"
+# TOKENIZER="EleutherAI/pythia-1.4b"
+# CSV_INPUT="tofu_data/tofu_full_train.csv"
+# CSV_INPUT="tofu_data/tofu_query_with_ids.csv"
+CSV_INPUT="tofu_data/tofu_full_sub.csv"
 # OUTPUT_DIR="corruptions_tofu"
-OUTPUT_DIR="corruptions_tofu_llama2"
+OUTPUT_DIR="corruptions_tofu_llama2_sub"
 # OUTPUT_DIR="corruptions_tofu_llama2_query"
 
 # Corruption parameters
@@ -21,16 +24,26 @@ FLUENCY_TAU=0.8
 MIN_EFFECT_DROP=0.08
 GEN_MAX_TOKENS=50
 
+# Chained corruptions: number of tokens to corrupt sequentially
+# 1 = single token (default), 2+ = chained (corrupt token 1, then find token 2 on corrupted text, etc.)
+NUM_CHAINED_CORRUPTIONS=3
+
+# Beam width for chained corruptions
+# 1 = greedy (picks best at each step), >1 = beam search (explores multiple paths)
+# Higher values find better chains but are slower (3-5 is a good balance)
+BEAM_WIDTH=3
+
 # Answer splitting options (set to 1 to enable, 0 to disable)
 SPLIT_LONG_ANSWERS=0
 ANSWER_LENGTH_THRESHOLD=2.0
 
 # Optional: Limit number of input rows to process (set to 0 or leave empty to process all)
-LIMIT=1000
+# LIMIT=1000
+LIMIT=0
 
 # Number of GPUs to use
-NUM_GPUS=3
-GPU_IDS=(0 1 3)  # Adjust based on your available GPUs
+NUM_GPUS=2
+GPU_IDS=(2 3)  # Adjust based on your available GPUs
 
 # Create output directory
 mkdir -p $OUTPUT_DIR
@@ -96,7 +109,7 @@ else
 fi
 
 # Build common arguments
-COMMON_ARGS="--corruption $CORRUPTION --model $MODEL --tokenizer $TOKENIZER --top_k $TOP_K --max_per_pos $MAX_PER_POS --max_total $MAX_TOTAL --fluency_tau $FLUENCY_TAU --min_effect_drop $MIN_EFFECT_DROP --gen_max_tokens $GEN_MAX_TOKENS"
+COMMON_ARGS="--corruption $CORRUPTION --model $MODEL --tokenizer $TOKENIZER --top_k $TOP_K --max_per_pos $MAX_PER_POS --max_total $MAX_TOTAL --fluency_tau $FLUENCY_TAU --min_effect_drop $MIN_EFFECT_DROP --gen_max_tokens $GEN_MAX_TOKENS --num_chained_corruptions $NUM_CHAINED_CORRUPTIONS --beam_width $BEAM_WIDTH"
 
 # Add split_long_answers flag if enabled
 if [ "$SPLIT_LONG_ANSWERS" -eq 1 ]; then
@@ -105,6 +118,9 @@ if [ "$SPLIT_LONG_ANSWERS" -eq 1 ]; then
 else
     echo "Answer splitting: DISABLED"
 fi
+
+echo "Chained corruptions: $NUM_CHAINED_CORRUPTIONS"
+echo "Beam width: $BEAM_WIDTH"
 
 # Determine output filename based on split_long_answers setting
 if [ "$SPLIT_LONG_ANSWERS" -eq 1 ]; then

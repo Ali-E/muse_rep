@@ -33,58 +33,91 @@ from transformers import (
     AutoModelForCausalLM,
     TrainingArguments,
     Trainer,
-    default_data_collator
+    DataCollatorForSeq2Seq,
 )
 
 
-def load_tofu_dataset(split: str = "train", subset: str = "full") -> Dataset:
+def load_tofu_dataset(split: str = "train", subset: str = "full", answer_only_loss: bool = True,
+                      repeat_short_answers: int = 1, short_answer_threshold: int = 50) -> Dataset:
     """
     Load TOFU dataset from HuggingFace Hub.
-    
+
     Args:
         split: Dataset split ("train", "validation", "test")
         subset: TOFU subset ("full", "forget01", "forget05", "forget10", etc.)
-        
+        answer_only_loss: If True, return separate question/answer for masking loss on question
+        repeat_short_answers: Repeat examples with short answers N times (helps memorization)
+        short_answer_threshold: Character threshold for "short" answers (default: 50)
+
     Returns:
         HuggingFace Dataset with 'text' column formatted as Q&A pairs
+        If answer_only_loss=True, also includes 'question_len' for loss masking
     """
     print(f"Loading TOFU dataset (subset={subset}, split={split})...")
-    
+
     # Load from HuggingFace Hub
     # TOFU dataset: locuslab/TOFU
     ds = load_dataset("locuslab/TOFU", subset, split=split)
-    
+
     # Format as Q&A pairs
     def format_tofu_example(example):
         question = example.get("question", "")
         answer = example.get("answer", "")
-        
+
         # Format as "Question: ... Answer: ..." for causal LM training
-        text = f"Question: {question}\nAnswer: {answer}"
-        return {"text": text}
-    
+        # Store the question prefix length for optional loss masking
+        question_prefix = f"Question: {question}\nAnswer:"
+        text = f"{question_prefix} {answer}"
+        return {"text": text, "question_prefix": question_prefix, "answer_len": len(answer)}
+
     formatted_ds = ds.map(format_tofu_example, remove_columns=ds.column_names)
-    
+
     print(f"Loaded {len(formatted_ds)} examples from TOFU dataset")
+
+    # Repeat short answers to help memorization
+    if repeat_short_answers > 1:
+        # Separate short and long answers
+        short_examples = formatted_ds.filter(lambda x: x["answer_len"] <= short_answer_threshold)
+        long_examples = formatted_ds.filter(lambda x: x["answer_len"] > short_answer_threshold)
+
+        print(f"Short answers (<={short_answer_threshold} chars): {len(short_examples)}")
+        print(f"Long answers (>{short_answer_threshold} chars): {len(long_examples)}")
+
+        # Repeat short examples
+        if len(short_examples) > 0:
+            repeated_short = concatenate_datasets([short_examples] * repeat_short_answers)
+            formatted_ds = concatenate_datasets([repeated_short, long_examples])
+            # Shuffle to interleave short and long examples
+            formatted_ds = formatted_ds.shuffle(seed=42)
+            print(f"After repeating short answers {repeat_short_answers}x: {len(formatted_ds)} total examples")
+
+    # Remove answer_len column (not needed for training)
+    formatted_ds = formatted_ds.remove_columns(["answer_len"])
+
     return formatted_ds
 
 
-def load_data_files(file_paths: List[str], use_tofu: bool = False, tofu_subset: str = "full", tofu_split: str = "train") -> Dataset:
+def load_data_files(file_paths: List[str], use_tofu: bool = False, tofu_subset: str = "full", tofu_split: str = "train",
+                    answer_only_loss: bool = True, repeat_short_answers: int = 1, short_answer_threshold: int = 50) -> Dataset:
     """
     Load and concatenate multiple text or JSON files into a single dataset.
     Optionally load TOFU dataset from HuggingFace Hub.
-    
+
     Args:
         file_paths: List of paths to .txt or .json files (ignored if use_tofu=True)
         use_tofu: If True, load TOFU dataset instead of files
         tofu_subset: TOFU subset ("full", "forget01", "forget05", "forget10")
         tofu_split: TOFU split ("train", "validation", "test")
-        
+        answer_only_loss: If True (and use_tofu=True), compute loss only on answer tokens
+        repeat_short_answers: Repeat short answers N times (helps memorization)
+        short_answer_threshold: Character threshold for "short" answers
+
     Returns:
         Combined HuggingFace Dataset with 'text' column
     """
     if use_tofu:
-        return load_tofu_dataset(split=tofu_split, subset=tofu_subset)
+        return load_tofu_dataset(split=tofu_split, subset=tofu_subset, answer_only_loss=answer_only_loss,
+                                 repeat_short_answers=repeat_short_answers, short_answer_threshold=short_answer_threshold)
     
     datasets = []
     
@@ -131,10 +164,13 @@ def finetune(
     use_tofu: bool = False,
     tofu_subset: str = "full",
     tofu_split: str = "train",
+    answer_only_loss: bool = True,
+    repeat_short_answers: int = 1,
+    short_answer_threshold: int = 50,
 ):
     """
     Fine-tune a causal language model on custom data.
-    
+
     Args:
         model_path: Path or name of the base model
         tokenizer_path: Path or name of the tokenizer
@@ -150,6 +186,8 @@ def finetune(
         save_strategy: When to save checkpoints (default: "epoch")
         logging_steps: Log every N steps (default: 50)
         bf16: Use BF16 precision (default: True)
+        repeat_short_answers: Repeat short answers N times (helps memorization)
+        short_answer_threshold: Character threshold for "short" answers
     """
     print(f"Loading model from {model_path}")
     print(f"Loading tokenizer from {tokenizer_path}")
@@ -176,14 +214,20 @@ def finetune(
     # Load and prepare data
     if use_tofu:
         print(f"Loading TOFU dataset (subset={tofu_subset}, split={tofu_split})")
+        print(f"Answer-only loss: {answer_only_loss}")
     else:
         print(f"Loading data from {len(data_files)} file(s)")
-    dataset = load_data_files(data_files, use_tofu=use_tofu, tofu_subset=tofu_subset, tofu_split=tofu_split)
+    dataset = load_data_files(data_files, use_tofu=use_tofu, tofu_subset=tofu_subset, tofu_split=tofu_split,
+                              answer_only_loss=answer_only_loss, repeat_short_answers=repeat_short_answers,
+                              short_answer_threshold=short_answer_threshold)
     print(f"Total examples: {len(dataset)}")
-    
+
+    # Check if dataset has question_prefix column (for answer-only loss)
+    has_question_prefix = "question_prefix" in dataset.column_names
+
     # Track truncation statistics
-    truncation_stats = {"truncated": 0, "total": 0, "lengths": []}
-    
+    truncation_stats = {"truncated": 0, "total": 0, "lengths": [], "answer_only_masked": 0}
+
     # Tokenization function
     def tokenize_function(examples):
         # Tokenize without truncation first to measure lengths
@@ -192,7 +236,7 @@ def finetune(
             truncation=False,
             padding=False,
         )
-        
+
         # Count truncations
         for ids in untruncated["input_ids"]:
             length = len(ids)
@@ -200,18 +244,45 @@ def finetune(
             truncation_stats["total"] += 1
             if length > max_length:
                 truncation_stats["truncated"] += 1
-        
-        # Tokenize the texts with truncation
+
+        # Tokenize the texts with truncation (NO padding here - use dynamic padding later)
         result = tokenizer(
             examples["text"],
             truncation=True,
             max_length=max_length,
-            padding="max_length",  # Pad to max_length
+            padding=False,  # Dynamic padding will be applied by data collator
         )
-        # For causal LM, labels are the same as input_ids
-        result["labels"] = result["input_ids"][:]
+
+        # Create labels - for causal LM, labels are the same as input_ids
+        # But we need to mask padding tokens (will be handled by collator) and optionally question tokens
+        labels = []
+        for i, input_ids in enumerate(result["input_ids"]):
+            label = input_ids.copy()
+
+            # If answer_only_loss and we have question_prefix, mask question tokens
+            if has_question_prefix and answer_only_loss and "question_prefix" in examples:
+                question_prefix = examples["question_prefix"][i]
+                # Tokenize the question prefix to get its length
+                question_tokens = tokenizer(
+                    question_prefix,
+                    truncation=False,
+                    padding=False,
+                    add_special_tokens=False,
+                )["input_ids"]
+                question_len = len(question_tokens)
+
+                # Set labels to -100 for question tokens (they won't contribute to loss)
+                # Note: we include the BOS token in masking if present
+                mask_len = question_len + (1 if tokenizer.bos_token_id is not None else 0)
+                for j in range(min(mask_len, len(label))):
+                    label[j] = -100
+                truncation_stats["answer_only_masked"] += 1
+
+            labels.append(label)
+
+        result["labels"] = labels
         return result
-    
+
     print("Tokenizing dataset...")
     tokenized_dataset = dataset.map(
         tokenize_function,
@@ -228,6 +299,8 @@ def finetune(
         print(f"Total samples: {truncation_stats['total']}")
         print(f"Truncated samples: {truncation_stats['truncated']} ({100*truncation_stats['truncated']/truncation_stats['total']:.1f}%)")
         print(f"Within max_length: {truncation_stats['total']-truncation_stats['truncated']} ({100*(truncation_stats['total']-truncation_stats['truncated'])/truncation_stats['total']:.1f}%)")
+        if answer_only_loss and truncation_stats["answer_only_masked"] > 0:
+            print(f"Samples with question masked: {truncation_stats['answer_only_masked']}")
         lengths = truncation_stats["lengths"]
         print(f"\nLength statistics:")
         print(f"  Min: {min(lengths)}")
@@ -236,8 +309,15 @@ def finetune(
         print(f"  Median: {sorted(lengths)[len(lengths)//2]}")
         print(f"{'='*60}\n")
     
-    # Use default data collator
-    data_collator = default_data_collator
+    # Use DataCollatorForSeq2Seq for dynamic padding and proper label masking
+    # This collator pads sequences to the longest in the batch (not max_length)
+    # and sets padding tokens in labels to -100 so they're ignored in loss
+    data_collator = DataCollatorForSeq2Seq(
+        tokenizer=tokenizer,
+        padding=True,  # Dynamic padding per batch
+        pad_to_multiple_of=8,  # Pad to multiple of 8 for efficiency on GPU
+        label_pad_token_id=-100,  # Ignore padding tokens in loss
+    )
     
     # Training arguments (MUSE paper defaults)
     training_args = TrainingArguments(
@@ -411,7 +491,24 @@ def main():
         action="store_true",
         help="Disable BF16 precision (use FP32 instead)"
     )
-    
+    parser.add_argument(
+        "--no_answer_only_loss",
+        action="store_true",
+        help="Compute loss on full sequence including question (default: loss on answer only for TOFU)"
+    )
+    parser.add_argument(
+        "--repeat_short_answers",
+        type=int,
+        default=1,
+        help="Repeat short answers N times in training data to improve memorization (default: 1, no repeat)"
+    )
+    parser.add_argument(
+        "--short_answer_threshold",
+        type=int,
+        default=50,
+        help="Character threshold for 'short' answers (default: 50 chars)"
+    )
+
     args = parser.parse_args()
     
     # Validate arguments
@@ -437,6 +534,9 @@ def main():
         use_tofu=args.tofu,
         tofu_subset=args.tofu_subset,
         tofu_split=args.tofu_split,
+        answer_only_loss=not args.no_answer_only_loss,
+        repeat_short_answers=args.repeat_short_answers,
+        short_answer_threshold=args.short_answer_threshold,
     )
 
 

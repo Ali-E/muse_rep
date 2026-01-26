@@ -5,8 +5,8 @@
 # and creates author-level rankings for each site type.
 
 # Configuration
-OUTPUT_DIR="ps_cross_dataset_outputs"
-TARGET_AUTHORS_CSV="tofu_data/authors_paragraphs_final.csv"
+OUTPUT_DIR="ps_cross_dataset_outputs_short"
+TARGET_AUTHORS_CSV="tofu_data/authors_paragraphs_short.csv"
 SOURCE_AUTHORS_CSV="tofu_data/source_authors.csv"
 SAMPLES_PER_AUTHOR=20
 

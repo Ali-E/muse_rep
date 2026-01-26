@@ -42,3 +42,4 @@ site_outputs/*
 ps_cross_dataset_outputs_mlp/*
 ps_cross_dataset_outputs/*
 finetuned_tofu_llama2_model/*
+site_outputs_*

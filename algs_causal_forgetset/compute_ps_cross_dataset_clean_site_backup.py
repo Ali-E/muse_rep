@@ -1,12 +1,26 @@
 """
-Algorithm 1 (cross-dataset): Compute PS weights using sites from one dataset (source)
-and evaluate them on a different dataset (target).
+Algorithm (cross-dataset with clean site): Compute PS weights using activations from the CLEAN
+run of source samples (at a specified site type and layer) and evaluate them on corrupted
+runs of target samples.
 
-Sites are retrieved from samples localized using the source dataset (e.g., tofu_corruptions.csv)
-and evaluated by patching corrupted runs on the target dataset (e.g., tofu_query.csv).
+Unlike compute_ps_cross_dataset.py which uses pre-localized sites from corrupted runs,
+this script:
+1. Runs the source sample's CLEAN prompt to get activations at a specified site (e.g., mlp layer 10)
+2. Uses those activations to patch (or blend with) the corrupted run of target samples
+
+Key new parameters:
+- --source_site_type: Type of site to extract from clean run (mlp_post, resid_post, attn_head)
+- --source_site_layer: Layer index for the site
+- --source_site_head: Head index for attention sites (optional)
+- --blend_weight: If specified, use weighted average instead of replacement
+                  blend_weight=1.0 means use only source (full replacement)
+                  blend_weight=0.5 means average source and target
+                  blend_weight=0.0 means no effect (use only target)
+- --num_answer_positions: If specified, only use the LAST N answer token positions
+                          (later positions have more context and may be more informative)
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import argparse
 import csv
 import os
@@ -20,7 +34,6 @@ from tqdm import tqdm
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from generate_corruptions import split_blank
-from activation_utils import load_saved_site, make_patch_hook_from_slice, make_average_hook_from_slice
 from patch_sweep import plain_runner_factory, hooks_runner_factory, answer_pred_positions
 from judges import ProbabilityAnswerJudge, BaseJudge
 
@@ -44,10 +57,11 @@ def load_model(model_name: str, tokenizer_name: Optional[str] = None, device: Op
         print(f"Loading model from local path: {model_name}")
 
         # Load HuggingFace model first
+        # Use specific device instead of 'auto' to avoid meta tensor issues with transformer_lens
         hf_model = AutoModelForCausalLM.from_pretrained(
             model_name,
             torch_dtype=torch.bfloat16,
-            device_map='auto'
+            device_map=device
         )
 
         # Determine the official model name for HookedTransformer
@@ -116,15 +130,12 @@ def best_corruption_by_id(rows: List[Dict[str, str]], chunk_format: bool = False
     """Get best (most impactful) corruption per ID from target corruptions.
 
     For chunk_format, uses chunk_id instead of id.
-    Accepts both single-token (lm_single) and chained (lm_chain_*) corruptions.
     """
     best: Dict[str, Dict[str, str]] = {}
     id_field = "chunk_id" if chunk_format else "id"
     for r in rows:
         tid = str(r.get(id_field, ""))
-        corruption_type = r.get("corruption", "")
-        # Accept lm_single and lm_chain_* corruptions, skip 'none' and other types
-        if not (corruption_type == "lm_single" or corruption_type.startswith("lm_chain")):
+        if r.get("corruption") != "lm_single":
             continue
         try:
             d = float(r.get("delta_from_clean", "0"))
@@ -155,6 +166,156 @@ def all_corruptions_by_id(rows: List[Dict[str, str]], chunk_format: bool = False
     return corruptions
 
 
+def get_hook_name(site_type: str, layer: int) -> str:
+    """Get the TransformerLens hook name for a given site type and layer."""
+    if site_type == "mlp_post" or site_type == "mlp":
+        return f"blocks.{layer}.mlp.hook_post"
+    elif site_type == "resid_post" or site_type == "resid":
+        return f"blocks.{layer}.hook_resid_post"
+    elif site_type == "attn_head" or site_type == "attn":
+        return f"blocks.{layer}.attn.hook_result"
+    elif site_type == "resid_pre":
+        return f"blocks.{layer}.hook_resid_pre"
+    elif site_type == "mlp_in":
+        return f"blocks.{layer}.mlp.hook_pre"
+    else:
+        raise ValueError(f"Unknown site_type: {site_type}")
+
+
+def extract_clean_activations(
+    model: HookedTransformer,
+    question: str,
+    answer: str,
+    site_type: str,
+    layer: int,
+    head_idx: Optional[int] = None,
+    tofu_format: bool = False,
+    chunk_format: bool = False,
+    num_answer_positions: Optional[int] = None,
+) -> Tuple[torch.Tensor, List[int], str]:
+    """
+    Run the clean prompt and extract activations at the specified site.
+
+    Args:
+        num_answer_positions: If specified, only use the LAST N answer token positions.
+                              Later positions have more context and may be more informative.
+
+    Returns:
+        act_slice: Tensor of activations at answer-predicting positions [B, S_ans, D]
+        pos_clean: List of answer-predicting positions (possibly truncated to last N)
+        hook_name: The hook name used
+    """
+    # Get prefix/suffix
+    if tofu_format or chunk_format:
+        pref = question
+        suff = ""
+    else:
+        pref, suff = split_blank(question)
+
+    # Build full prompt
+    full_prompt = pref + answer + suff
+    toks = model.to_tokens(full_prompt, prepend_bos=True)
+
+    # Get answer-predicting positions
+    pos_clean = answer_pred_positions(model, pref, answer)
+
+    # If num_answer_positions is specified and > 0, use only the LAST N positions
+    # (num_answer_positions <= 0 or None means use all positions)
+    if num_answer_positions is not None and num_answer_positions > 0:
+        if len(pos_clean) > num_answer_positions:
+            pos_clean = pos_clean[-num_answer_positions:]
+
+    # Get hook name
+    hook_name = get_hook_name(site_type, layer)
+
+    # Run with cache
+    with torch.no_grad():
+        _, cache = model.run_with_cache(toks)
+
+    # Extract activations
+    act = cache[hook_name]  # [B, S, D] or [B, S, H, d_head]
+
+    # Guard against out-of-bounds positions
+    S = act.shape[1]
+    valid_pos = [p for p in pos_clean if 0 <= p < S]
+    if not valid_pos:
+        raise ValueError(f"No valid positions for hook '{hook_name}'; pos_clean={pos_clean}, S={S}")
+
+    if head_idx is None:
+        # resid/mlp: [B, S, D] -> gather positions
+        act_slice = act[:, valid_pos, :].detach()
+    else:
+        # attn result: [B, S, H, d_head] -> pick head then positions
+        act_slice = act[:, valid_pos, head_idx, :].detach()
+
+    return act_slice, pos_clean, hook_name
+
+
+def make_patch_or_blend_hook(
+    clean_act_slice: torch.Tensor,
+    pos_clean: List[int],
+    pos_corr: List[int],
+    head_idx: Optional[int] = None,
+    blend_weight: float = 1.0,
+    num_answer_positions: Optional[int] = None,
+):
+    """
+    Create a hook that patches (or blends) clean activations into the corrupted run.
+
+    Args:
+        clean_act_slice: Clean activations at answer positions [B, S_ans, D]
+        pos_clean: Answer-predicting positions from clean run (already truncated to last N if specified)
+        pos_corr: Answer-predicting positions from corrupted run
+        head_idx: Head index for attention sites (None for mlp/resid)
+        blend_weight: Weight for clean activations (1.0 = full replacement, 0.5 = average)
+        num_answer_positions: If specified, only use the LAST N positions from pos_corr
+
+    Returns:
+        hook_fn: The hook function
+    """
+    # If num_answer_positions is specified and > 0, truncate pos_corr to last N positions
+    # (num_answer_positions <= 0 or None means use all positions)
+    if num_answer_positions is not None and num_answer_positions > 0:
+        if len(pos_corr) > num_answer_positions:
+            pos_corr = pos_corr[-num_answer_positions:]
+
+    # Allow partial alignment (use the minimum of what we have)
+    use_len = min(len(pos_clean), len(pos_corr))
+    pos_clean_used = pos_clean[:use_len]
+    pos_corr_used = pos_corr[:use_len]
+
+    def hook_fn(act, hook):
+        S = act.shape[1]
+        S_saved = clean_act_slice.shape[1]
+        max_len = min(len(pos_corr_used), S_saved)
+
+        if head_idx is None:
+            # resid/mlp: [B, S, D]
+            for k in range(max_len):
+                pr = pos_corr_used[k]
+                if 0 <= pr < S:
+                    clean_val = clean_act_slice[:, k, :].to(act.device)
+                    if blend_weight >= 1.0:
+                        # Full replacement
+                        act[:, pr, :] = clean_val
+                    else:
+                        # Weighted blend: new = w * clean + (1-w) * corrupted
+                        act[:, pr, :] = blend_weight * clean_val + (1.0 - blend_weight) * act[:, pr, :]
+        else:
+            # attn result: [B, S, H, d_head]
+            for k in range(max_len):
+                pr = pos_corr_used[k]
+                if 0 <= pr < S:
+                    clean_val = clean_act_slice[:, k, :].to(act.device)
+                    if blend_weight >= 1.0:
+                        act[:, pr, head_idx, :] = clean_val
+                    else:
+                        act[:, pr, head_idx, :] = blend_weight * clean_val + (1.0 - blend_weight) * act[:, pr, head_idx, :]
+        return act
+
+    return hook_fn
+
+
 def build_default_judge() -> BaseJudge:
     return ProbabilityAnswerJudge(mode="avg_logprob_exp")
 
@@ -162,16 +323,17 @@ def build_default_judge() -> BaseJudge:
 def main():
     ap = argparse.ArgumentParser(
         description=(
-            "Compute PS scores across two datasets: "
-            "Sites from source samples are evaluated on target prompts with their corruptions."
+            "Compute PS scores across two datasets using clean activations from source samples. "
+            "Extracts activations from a specific site in the clean run of source samples "
+            "and patches (or blends) them into corrupted runs of target samples."
         )
     )
     ap.add_argument("--model", required=True, help="Model name or path")
     ap.add_argument("--tokenizer", default=None, help="Tokenizer to use (defaults to model)")
     ap.add_argument(
-        "--source_samples_csv",
+        "--source_csv",
         required=True,
-        help="Source samples.csv with sample_id,meta_path,tensor_path (sites to evaluate)",
+        help="Source CSV with id,question,answer columns (clean samples to extract activations from)",
     )
     ap.add_argument(
         "--target_prompts_csv",
@@ -183,43 +345,86 @@ def main():
         required=True,
         help="Target corruptions CSV with id,corruption,question,answer (corruptions for target prompts)",
     )
+
+    # Site specification arguments
+    ap.add_argument("--source_site_type", required=True,
+                    choices=["mlp_post", "mlp", "resid_post", "resid", "attn_head", "attn", "resid_pre", "mlp_in"],
+                    help="Type of site to extract from clean source run")
+    ap.add_argument("--source_site_layer", type=int, required=True,
+                    help="Layer index for the site to extract")
+    ap.add_argument("--source_site_head", type=int, default=None,
+                    help="Head index for attention sites (required if site_type is attn_head)")
+
+    # Blending option
+    ap.add_argument("--blend_weight", type=float, default=1.0,
+                    help="Weight for source activations. 1.0=full replacement, 0.5=average, 0.0=no effect")
+
+    # Position limiting option
+    ap.add_argument("--num_answer_positions", type=int, default=None,
+                    help="If specified and > 0, only use the LAST N answer token positions (later positions have more context). Use -1 or omit for all positions.")
+
+    # Output files
     ap.add_argument("--out_agg_csv", required=True, help="Output aggregate CSV")
     ap.add_argument("--out_detailed_csv", required=True, help="Output detailed CSV")
     ap.add_argument("--out_ranked_csv", default=None, help="Output ranked sources per target CSV (based on best corruption)")
     ap.add_argument("--out_avg_ranked_csv", default=None, help="Output ranked sources per target CSV (based on average over all corruptions)")
-    ap.add_argument("--site_type", default=None,
-                    help="Site type to use: overall, mlp, resid, last_mlp_in, last_mlp_out. If not specified, uses the variant from samples.csv")
-    ap.add_argument("--limit", type=int, default=None, help="Limit number of samples to process")
+
+    ap.add_argument("--limit", type=int, default=None, help="Limit number of source samples to process")
     ap.add_argument("--device", default=None)
     ap.add_argument("--eps", type=float, default=1e-6, help="Epsilon for numerical stability")
     ap.add_argument("--tofu_format", action="store_true",
                     help="Use TOFU format (question+answer columns, no blanks)")
     ap.add_argument("--chunk_format", action="store_true",
                     help="Use chunk format (target prompts have id,text columns; corruptions have chunk_id,question,answer)")
-    ap.add_argument("--average_last_mlp", action="store_true",
-                    help="For last_mlp_in/last_mlp_out sites: average with corrupted activations instead of replacing")
-    ap.add_argument("--num_answer_positions", type=int, default=None,
-                    help="If specified and > 0, only use the LAST N answer token positions (later positions have more context). Use -1 or omit for all positions.")
     args = ap.parse_args()
 
     # Validate arguments
     if not args.chunk_format and args.target_prompts_csv is None:
         ap.error("--target_prompts_csv is required when not using --chunk_format")
 
+    if args.source_site_type in ["attn_head", "attn"] and args.source_site_head is None:
+        ap.error("--source_site_head is required when using attn_head site type")
+
+    if args.blend_weight < 0.0 or args.blend_weight > 1.0:
+        ap.error("--blend_weight must be between 0.0 and 1.0")
+
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
     model = load_model(args.model, args.tokenizer, device)
     judge = build_default_judge()
     plain_runner = plain_runner_factory(model)
 
+    # Load source samples (clean samples to extract activations from)
+    source_samples = load_csv(args.source_csv)
+
+    # Detect source format: check for common column names
+    if source_samples:
+        sample_cols = set(source_samples[0].keys())
+        # Check if it's TOFU format, samples.csv format, or chunk format
+        if "sample_id" in sample_cols:
+            # samples.csv format from localize_sites
+            source_id_field = "sample_id"
+            source_question_field = "question"
+            source_answer_field = "original_answer"
+        elif "chunk_id" in sample_cols:
+            source_id_field = "chunk_id"
+            source_question_field = "question"
+            source_answer_field = "answer"
+        else:
+            # Standard format (id, question, answer)
+            source_id_field = "id"
+            source_question_field = "question"
+            source_answer_field = "answer"
+
+    if args.limit is not None:
+        source_samples = source_samples[:args.limit]
+
     # Load target prompts and corruptions
     if args.chunk_format:
         # For chunk format, prompts come from the corruptions CSV itself
-        # Each chunk_id has question/answer from the corruptions
         target_corr_rows = load_csv(args.target_corruptions_csv)
         best_target_corr = best_corruption_by_id(target_corr_rows, chunk_format=True)
 
         # Build target_prompts from the "none" corruptions (clean prompts)
-        # or from the best corruptions if no "none" entries exist
         target_prompts = []
         seen_ids = set()
         for r in target_corr_rows:
@@ -233,19 +438,6 @@ def main():
                     "question": r.get("question", ""),
                     "answer": r.get("answer", ""),
                 })
-        # If no "none" corruptions, use the best corruptions for clean q/a
-        if not target_prompts:
-            for tid, corr in best_target_corr.items():
-                # Note: For chunk format, the "none" entry has clean q/a
-                # We need to get that from the corruptions list
-                for r in target_corr_rows:
-                    if str(r.get("chunk_id", "")) == tid and r.get("corruption") == "none":
-                        target_prompts.append({
-                            "id": tid,
-                            "question": r.get("question", ""),
-                            "answer": r.get("answer", ""),
-                        })
-                        break
     else:
         target_prompts = load_csv(args.target_prompts_csv)
         target_corr_rows = load_csv(args.target_corruptions_csv)
@@ -254,16 +446,13 @@ def main():
     # Also get all corruptions for averaging (if avg_ranked output requested)
     all_target_corr = all_corruptions_by_id(target_corr_rows, chunk_format=args.chunk_format)
 
-    if args.limit is not None:
-        target_prompts = target_prompts[: args.limit]
-
-    # Load source samples (sites to evaluate)
-    source_samples = load_csv(args.source_samples_csv)
-
-    print(f"Loaded {len(source_samples)} source samples (sites)")
+    print(f"Loaded {len(source_samples)} source samples")
     print(f"Loaded {len(target_prompts)} target prompts")
     print(f"Loaded {len(best_target_corr)} best target corruptions")
-    print(f"Loaded {len(all_target_corr)} target IDs with all corruptions (total: {sum(len(v) for v in all_target_corr.values())})")
+    print(f"Loaded {len(all_target_corr)} target IDs with all corruptions")
+    print(f"Site: {args.source_site_type} layer {args.source_site_layer}" +
+          (f" head {args.source_site_head}" if args.source_site_head is not None else ""))
+    print(f"Blend weight: {args.blend_weight}")
     print(f"Num answer positions: {args.num_answer_positions if args.num_answer_positions else 'all'}")
 
     # ------------------------------------------------------------------
@@ -281,13 +470,13 @@ def main():
         a = str(row.get("answer", ""))
         if not q or not a:
             continue
-        
+
         # Get corruption for this target prompt
         corr = best_target_corr.get(tid)
         if not corr:
             print(f"Warning: No corruption found for target prompt id={tid}")
             continue
-        
+
         qc = corr.get("question", "")
         if not qc:
             print(f"Warning: Empty corrupted question for target prompt id={tid}")
@@ -330,41 +519,42 @@ def main():
     target_rankings: Dict[str, List[Dict]] = {}
 
     # For average-based ranked output: (source_id, target_id) -> list of fraction_restored scores
-    # This will be used to compute average over all corruptions
-    avg_rankings_data: Dict[str, Dict[str, Dict]] = {}  # source_id -> target_id -> {scores: [], meta: {}}
+    avg_rankings_data: Dict[str, Dict[str, Dict]] = {}
 
     # ------------------------------------------------------------------
-    # Main loop: For each source sample (site), evaluate on all target prompts
+    # Main loop: For each source sample, extract clean activations and evaluate on all target prompts
     # ------------------------------------------------------------------
-    for s in tqdm(source_samples, desc="Evaluating source sites on target prompts"):
-        sid = s["sample_id"]
-        meta_path = s["meta_path"]
-        tensor_path = s["tensor_path"]
+    for s in tqdm(source_samples, desc="Evaluating source clean activations on target prompts"):
+        sid = str(s.get(source_id_field, ""))
+        source_q = str(s.get(source_question_field, ""))
+        source_a = str(s.get(source_answer_field, ""))
 
-        # Override paths if site_type is specified
-        if args.site_type:
-            # Extract directory and model name from original path
-            base_dir = os.path.dirname(meta_path)
-            # Construct new paths with the specified site type
-            meta_path = os.path.join(base_dir, f"{sid}_{args.site_type}_top_site_meta.json")
-            tensor_path = os.path.join(base_dir, f"{sid}_{args.site_type}_top_site_act.pt")
+        if not source_q or not source_a:
+            print(f"Warning: Empty question/answer for source sample {sid}, skipping")
+            continue
 
-            # Verify files exist
-            if not os.path.exists(meta_path):
-                print(f"Warning: Meta file not found: {meta_path}, skipping sample {sid}")
-                continue
-            if not os.path.exists(tensor_path):
-                print(f"Warning: Tensor file not found: {tensor_path}, skipping sample {sid}")
-                continue
-
-        # Load the site (activation slice)
-        meta, act_slice = load_saved_site(meta_path, tensor_path)
+        # Extract clean activations from source sample
+        try:
+            clean_act_slice, pos_clean, hook_name = extract_clean_activations(
+                model=model,
+                question=source_q,
+                answer=source_a,
+                site_type=args.source_site_type,
+                layer=args.source_site_layer,
+                head_idx=args.source_site_head,
+                tofu_format=args.tofu_format,
+                chunk_format=args.chunk_format,
+                num_answer_positions=args.num_answer_positions,
+            )
+        except Exception as e:
+            print(f"Warning: Failed to extract activations for source {sid}: {e}")
+            continue
 
         numer = 0.0
         denom = 0.0
         n = 0
 
-        # Evaluate this site on each target prompt
+        # Evaluate this source's clean activations on each target prompt
         for idx, info in enumerate(target_base_info):
             if info is None:
                 continue
@@ -382,16 +572,20 @@ def main():
             if not pos_corr:
                 continue
 
-            # Patch the site at the corrupted answer positions and score
+            # Create patch/blend hook and evaluate
             try:
-                # Create patch hook for this specific target's positions
-                hook_name_on, hook_on = make_patch_hook_from_slice(
-                    meta, act_slice, pos_corr, num_answer_positions=args.num_answer_positions
+                hook_fn = make_patch_or_blend_hook(
+                    clean_act_slice=clean_act_slice,
+                    pos_clean=pos_clean,
+                    pos_corr=pos_corr,
+                    head_idx=args.source_site_head,
+                    blend_weight=args.blend_weight,
+                    num_answer_positions=args.num_answer_positions,
                 )
-                on_runner = hooks_runner_factory(model, [(hook_name_on, hook_on)])
+                on_runner = hooks_runner_factory(model, [(hook_name, hook_fn)])
                 r_on_c = judge.score(model, on_runner, pref_c, a, suff_c)
             except Exception as e:
-                print(f"Warning: Failed to score site {sid} on target {tid}: {e}")
+                print(f"Warning: Failed to score source {sid} on target {tid}: {e}")
                 continue
 
             # Compute weight using clean and corrupted base scores
@@ -424,8 +618,8 @@ def main():
                 target_rankings[tid] = []
             target_rankings[tid].append({
                 "source_sample_id": sid,
-                "source_question": s.get("question", ""),
-                "source_answer": s.get("original_answer", ""),
+                "source_question": source_q,
+                "source_answer": source_a,
                 "target_prompt_id": tid,
                 "target_question": q,
                 "target_answer": a,
@@ -433,9 +627,12 @@ def main():
                 "r": r,
                 "r_c": r_c,
                 "r_on_c": r_on_c,
-                "meta_path": meta_path,
-                "hook_name": meta.get("hook_name", meta.get("site", "")),
+                "site_type": args.source_site_type,
+                "site_layer": args.source_site_layer,
+                "site_head": args.source_site_head,
+                "blend_weight": args.blend_weight,
                 "num_answer_positions": args.num_answer_positions,
+                "hook_name": hook_name,
             })
 
             # ------------------------------------------------------------------
@@ -451,15 +648,18 @@ def main():
                             "scores": [],
                             "meta": {
                                 "source_sample_id": sid,
-                                "source_question": s.get("question", ""),
-                                "source_answer": s.get("original_answer", ""),
+                                "source_question": source_q,
+                                "source_answer": source_a,
                                 "target_prompt_id": tid,
                                 "target_question": q,
                                 "target_answer": a,
-                                "r": r,  # clean score (same for all corruptions)
-                                "meta_path": meta_path,
-                                "hook_name": meta.get("hook_name", meta.get("site", "")),
+                                "r": r,
+                                "site_type": args.source_site_type,
+                                "site_layer": args.source_site_layer,
+                                "site_head": args.source_site_head,
+                                "blend_weight": args.blend_weight,
                                 "num_answer_positions": args.num_answer_positions,
+                                "hook_name": hook_name,
                             }
                         }
 
@@ -484,12 +684,17 @@ def main():
                         if not pos_corr_all:
                             continue
 
-                        # Patch and score
+                        # Patch/blend and score
                         try:
-                            hook_name_on_all, hook_on_all = make_patch_hook_from_slice(
-                                meta, act_slice, pos_corr_all, num_answer_positions=args.num_answer_positions
+                            hook_fn_all = make_patch_or_blend_hook(
+                                clean_act_slice=clean_act_slice,
+                                pos_clean=pos_clean,
+                                pos_corr=pos_corr_all,
+                                head_idx=args.source_site_head,
+                                blend_weight=args.blend_weight,
+                                num_answer_positions=args.num_answer_positions,
                             )
-                            on_runner_all = hooks_runner_factory(model, [(hook_name_on_all, hook_on_all)])
+                            on_runner_all = hooks_runner_factory(model, [(hook_name, hook_fn_all)])
                             r_on_c_all = judge.score(model, on_runner_all, pref_c_all, a, suff_c_all)
                         except Exception as e:
                             continue
@@ -506,16 +711,19 @@ def main():
             "source_sample_id": sid,
             "ps": ps,
             "n_target_prompts": n,
-            "meta_path": meta_path,
-            "hook_name": meta.get("hook_name", meta.get("site", "")),
+            "site_type": args.source_site_type,
+            "site_layer": args.source_site_layer,
+            "site_head": args.source_site_head,
+            "blend_weight": args.blend_weight,
             "num_answer_positions": args.num_answer_positions,
+            "hook_name": hook_name,
         })
 
     # Write aggregate results
     with open(args.out_agg_csv, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
             f,
-            fieldnames=["source_sample_id", "ps", "n_target_prompts", "meta_path", "hook_name", "num_answer_positions"]
+            fieldnames=["source_sample_id", "ps", "n_target_prompts", "site_type", "site_layer", "site_head", "blend_weight", "num_answer_positions", "hook_name"]
         )
         writer.writeheader()
         for r in agg_rows:
@@ -569,9 +777,12 @@ def main():
                     "r",
                     "r_c",
                     "r_on_c",
-                    "meta_path",
-                    "hook_name",
+                    "site_type",
+                    "site_layer",
+                    "site_head",
+                    "blend_weight",
                     "num_answer_positions",
+                    "hook_name",
                 ],
             )
             writer.writeheader()
@@ -580,9 +791,8 @@ def main():
 
         print(f"Wrote {len(ranked_rows)} ranked rows to {args.out_ranked_csv}")
 
-    # Write average-based ranked results (sources ranked by avg fraction_restored over all corruptions)
+    # Write average-based ranked results
     if args.out_avg_ranked_csv and avg_rankings_data:
-        # Build list of (source, target, avg_fraction_restored, n_corruptions, meta)
         avg_ranked_entries: List[Dict] = []
         for sid, targets in avg_rankings_data.items():
             for tid, data in targets.items():
@@ -627,9 +837,12 @@ def main():
                     "avg_fraction_restored",
                     "n_corruptions",
                     "r",
-                    "meta_path",
-                    "hook_name",
+                    "site_type",
+                    "site_layer",
+                    "site_head",
+                    "blend_weight",
                     "num_answer_positions",
+                    "hook_name",
                 ],
             )
             writer.writeheader()

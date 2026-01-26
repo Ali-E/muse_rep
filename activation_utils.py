@@ -15,39 +15,66 @@ def make_patch_hook_from_slice(
     meta: Dict,
     act_slice: torch.Tensor,
     pos_corr: List[int],
+    num_answer_positions: Optional[int] = None,
 ):
     """
     Create a patch hook for the corrupted run using a saved clean activation slice.
     The meta must include: hook_name, head_idx (or None), positions_clean.
     act_slice shape: [B, S, D] or [B, S, d_head] for selected head.
+
+    Args:
+        num_answer_positions: If specified, only use the LAST N positions from both
+                              pos_clean and pos_corr (later positions have more context).
     """
     hook_name = meta["hook_name"]
     head_idx = meta.get("head_idx", None)
     pos_clean: List[int] = meta["positions_clean"]
+
+    # If num_answer_positions is specified and > 0, use only the LAST N positions
+    # (num_answer_positions <= 0 or None means use all positions)
+    if num_answer_positions is not None and num_answer_positions > 0:
+        if len(pos_clean) > num_answer_positions:
+            pos_clean = pos_clean[-num_answer_positions:]
+        if len(pos_corr) > num_answer_positions:
+            pos_corr = pos_corr[-num_answer_positions:]
+
     # Allow partial alignment if sequence lengths differ; zip up to min length
     use_len = min(len(pos_clean), len(pos_corr))
     pos_clean = pos_clean[:use_len]
     pos_corr = pos_corr[:use_len]
 
+    # When using num_answer_positions, we need to adjust the act_slice indexing
+    # The act_slice tensor corresponds to the ORIGINAL pos_clean from meta
+    # If we're using last N positions, we need to use the last N positions of act_slice too
+    original_pos_clean: List[int] = meta["positions_clean"]
+    if num_answer_positions is not None and num_answer_positions > 0:
+        if len(original_pos_clean) > num_answer_positions:
+            # Use the last N positions of the act_slice
+            act_slice_offset = len(original_pos_clean) - num_answer_positions
+        else:
+            act_slice_offset = 0
+    else:
+        act_slice_offset = 0
+
     # Ensure act_slice is [B,S,D] or [B,S,d_head]
     def hook_fn(act, hook):
         # act is [B,S,D] or [B,S,H,d_head]
-        # act_slice is [B,S_saved,D] or [B,S_saved,d_head], where S_saved == len(pos_clean)
+        # act_slice is [B,S_saved,D] or [B,S_saved,d_head], where S_saved == len(original_pos_clean)
         S = act.shape[1]
         S_saved = act_slice.shape[1]
-        max_len = min(len(pos_corr), S_saved)
+        max_len = min(len(pos_corr), S_saved - act_slice_offset)
         if head_idx is None:
             # resid/mlp: write rows at pos_corr with stored clean rows
             for k in range(max_len):
                 pr = pos_corr[k]
                 if 0 <= pr < S:
-                    act[:, pr, :] = act_slice[:, k, :].to(act.device)
+                    act[:, pr, :] = act_slice[:, act_slice_offset + k, :].to(act.device)
         else:
             # attn result: pick head dimension
             for k in range(max_len):
                 pr = pos_corr[k]
                 if 0 <= pr < S:
-                    act[:, pr, head_idx, :] = act_slice[:, k, :].to(act.device)
+                    act[:, pr, head_idx, :] = act_slice[:, act_slice_offset + k, :].to(act.device)
         return act
 
     return hook_name, hook_fn
@@ -114,40 +141,64 @@ def make_average_hook_from_slice(
     meta: Dict,
     act_slice: torch.Tensor,
     pos_corr: List[int],
+    num_answer_positions: Optional[int] = None,
 ):
     """
     Create a hook that averages the saved clean activation with the current (corrupted) activation.
     This is useful for last_mlp_in/last_mlp_out to blend clean and corrupted states.
     The meta must include: hook_name, head_idx (or None), positions_clean.
     act_slice shape: [B, S, D] or [B, S, d_head] for selected head.
+
+    Args:
+        num_answer_positions: If specified, only use the LAST N positions from both
+                              pos_clean and pos_corr (later positions have more context).
     """
     hook_name = meta["hook_name"]
     head_idx = meta.get("head_idx", None)
     pos_clean: List[int] = meta["positions_clean"]
+
+    # If num_answer_positions is specified and > 0, use only the LAST N positions
+    # (num_answer_positions <= 0 or None means use all positions)
+    if num_answer_positions is not None and num_answer_positions > 0:
+        if len(pos_clean) > num_answer_positions:
+            pos_clean = pos_clean[-num_answer_positions:]
+        if len(pos_corr) > num_answer_positions:
+            pos_corr = pos_corr[-num_answer_positions:]
+
     # Allow partial alignment if sequence lengths differ
     use_len = min(len(pos_clean), len(pos_corr))
     pos_clean = pos_clean[:use_len]
     pos_corr = pos_corr[:use_len]
+
+    # When using num_answer_positions, we need to adjust the act_slice indexing
+    original_pos_clean: List[int] = meta["positions_clean"]
+    if num_answer_positions is not None and num_answer_positions > 0:
+        if len(original_pos_clean) > num_answer_positions:
+            act_slice_offset = len(original_pos_clean) - num_answer_positions
+        else:
+            act_slice_offset = 0
+    else:
+        act_slice_offset = 0
 
     def hook_fn(act, hook):
         # act is [B,S,D] or [B,S,H,d_head]
         # act_slice is [B,S_saved,D] or [B,S_saved,d_head]
         S = act.shape[1]
         S_saved = act_slice.shape[1]
-        max_len = min(len(pos_corr), S_saved)
+        max_len = min(len(pos_corr), S_saved - act_slice_offset)
         if head_idx is None:
             # resid/mlp: average current value with stored clean value
             for k in range(max_len):
                 pr = pos_corr[k]
                 if 0 <= pr < S:
-                    clean_act = act_slice[:, k, :].to(act.device)
+                    clean_act = act_slice[:, act_slice_offset + k, :].to(act.device)
                     act[:, pr, :] = (act[:, pr, :] + clean_act) / 2.0
         else:
             # attn result: average for specific head
             for k in range(max_len):
                 pr = pos_corr[k]
                 if 0 <= pr < S:
-                    clean_act = act_slice[:, k, :].to(act.device)
+                    clean_act = act_slice[:, act_slice_offset + k, :].to(act.device)
                     act[:, pr, head_idx, :] = (act[:, pr, head_idx, :] + clean_act) / 2.0
         return act
 
