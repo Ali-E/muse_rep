@@ -25,7 +25,7 @@
 # Configuration
 # MODEL="/home/ae20/muse_data/finetuned_tofu_pythia_model/"
 # TOKENIZER="EleutherAI/pythia-1.4b"
-MODEL="/home/ae20/muse_data/finetuned_tofu_llama2_jan22/"
+MODEL="/home/ae20/muse_data/finetuned_tofu_llama2_jan25/"
 TOKENIZER="meta-llama/Llama-2-7b-hf"
 
 # Source: Clean samples CSV (with id,question,answer columns)

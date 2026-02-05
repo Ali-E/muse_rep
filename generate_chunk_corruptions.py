@@ -645,6 +645,7 @@ def lm_chained_corruptions(
     only_content_words: bool = True,
     min_effect_drop: float = 0.0,
     beam_width: int = 1,
+    num_chains_to_keep: int = 1,
 ) -> List[Dict]:
     """
     Generate chained corruptions using beam search to explore multiple paths.
@@ -667,6 +668,8 @@ def lm_chained_corruptions(
         only_content_words: Only corrupt content words
         min_effect_drop: Minimum drop required (not enforced during beam search, only for final selection)
         beam_width: Number of paths to keep at each step (1 = greedy, >1 = beam search)
+        num_chains_to_keep: Number of chains to keep per step length in the output
+                            (1 = only best, beam_width = all beams). Must be <= beam_width.
 
     Returns:
         List of chained corruption results, each with all positions/tokens that were corrupted
@@ -763,15 +766,13 @@ def lm_chained_corruptions(
             })
         all_step_results[step + 1] = step_results
 
-    # Return the best chain at each step length
-    # For each step, pick the result with the best (most negative) delta
+    # Return top num_chains_to_keep candidates at each step length (sorted by delta)
     results = []
     for step in sorted(all_step_results.keys()):
         step_results = all_step_results[step]
         if step_results:
-            # Pick the best result for this step
-            best = min(step_results, key=lambda x: x["delta_from_clean"])
-            results.append(best)
+            step_results.sort(key=lambda x: x["delta_from_clean"])
+            results.extend(step_results[:num_chains_to_keep])
 
     return results
 
@@ -864,7 +865,8 @@ def process_chunk(
     model: HookedTransformer,
     chunk_id: str,
     text: str,
-    args
+    args,
+    extra_metadata: Dict = None,
 ) -> List[Dict]:
     """
     Process one chunk: sample subsequences and find corruptions.
@@ -882,7 +884,10 @@ def process_chunk(
     if len(subseqs) == 0:
         print(f"Warning: Could not sample any subsequences from chunk {chunk_id}")
         return []
-    
+
+    if extra_metadata is None:
+        extra_metadata = {}
+
     results = []
 
     for seq_idx, subseq in enumerate(subseqs):
@@ -905,7 +910,7 @@ def process_chunk(
             clean_generated_answer = generate_answer_section(model, question, answer_length)
 
         # Always include clean baseline
-        results.append({
+        result_row = {
             "chunk_id": chunk_id,
             "seq_idx": seq_idx,
             "start_idx": subseq['start_idx'],
@@ -920,7 +925,9 @@ def process_chunk(
             "delta_from_clean": 0.0,
             "prompt_avg_nll_increase": 0.0,
             "generated_answer": clean_generated_answer,
-        })
+        }
+        result_row.update(extra_metadata)
+        results.append(result_row)
         
         # Check if we should use chained corruptions
         num_chain = getattr(args, 'num_chained_corruptions', 1)
@@ -939,6 +946,7 @@ def process_chunk(
                 only_content_words=args.only_content_words,
                 min_effect_drop=args.min_effect_drop,
                 beam_width=getattr(args, 'beam_width', 1),
+                num_chains_to_keep=getattr(args, 'num_chains_to_keep', 1),
             )
 
             # Convert chained results to output format
@@ -956,7 +964,7 @@ def process_chunk(
 
                 corruption_type = f"lm_chain_{cr['num_corruptions']}"
 
-                results.append({
+                result_row = {
                     "chunk_id": chunk_id,
                     "seq_idx": seq_idx,
                     "start_idx": subseq['start_idx'],
@@ -971,7 +979,9 @@ def process_chunk(
                     "delta_from_clean": cr["delta_from_clean"],
                     "prompt_avg_nll_increase": cr["nll_increase"],
                     "generated_answer": generated_answer,
-                })
+                }
+                result_row.update(extra_metadata)
+                results.append(result_row)
         else:
             # Use single-token corruptions (original behavior)
             props = lm_single_token_proposals(
@@ -995,7 +1005,7 @@ def process_chunk(
                     answer_length = len(subseq['answer_tokens'])
                     generated_answer = generate_answer_section(model, p["new_question"], answer_length)
 
-                scored.append({
+                result_row = {
                     "chunk_id": chunk_id,
                     "seq_idx": seq_idx,
                     "start_idx": subseq['start_idx'],
@@ -1010,7 +1020,9 @@ def process_chunk(
                     "delta_from_clean": avg_lp - base_avg_lp,  # negative = worse for answer
                     "prompt_avg_nll_increase": p["nll_increase"],
                     "generated_answer": generated_answer,
-                })
+                }
+                result_row.update(extra_metadata)
+                scored.append(result_row)
 
             # Keep only those that DECREASE the metric by >= min_effect_drop
             filtered = [r for r in scored if (r["delta_from_clean"] <= -args.min_effect_drop)]
@@ -1060,6 +1072,10 @@ def main():
                          ">1=beam search that explores multiple corruption paths and keeps "
                          "the top beam_width paths at each step. Higher values find better chains "
                          "but are slower (e.g., 3-5 is a good balance).")
+    ap.add_argument("--num_chains_to_keep", type=int, default=1,
+                    help="Number of chains to keep per step length in the output. "
+                         "1=only the best chain (default), higher values keep multiple "
+                         "beam candidates per chain length. Must be <= beam_width.")
 
     # Generated answer option
     ap.add_argument("--use_generated_answer", action='store_true',
@@ -1095,6 +1111,11 @@ def main():
     if 'text' not in df.columns or 'id' not in df.columns:
         raise ValueError("CSV must have 'id' and 'text' columns")
 
+    # Identify extra metadata columns to preserve (everything except 'id' and 'text')
+    extra_columns = [col for col in df.columns if col not in ['id', 'text']]
+    if extra_columns:
+        print(f"Preserving extra columns: {extra_columns}")
+
     chunks = df.to_dict('records')
 
     if args.limit is not None:
@@ -1107,11 +1128,14 @@ def main():
         chunk_id = str(chunk["id"])
         text = str(chunk["text"])
 
+        # Extract extra metadata columns
+        extra_metadata = {col: chunk.get(col) for col in extra_columns}
+
         # Optionally clean invisible Unicode characters
         if args.clean_unicode:
             text = clean_invisible_unicode(text)
 
-        res = process_chunk(model, chunk_id, text, args)
+        res = process_chunk(model, chunk_id, text, args, extra_metadata=extra_metadata)
         out_rows.extend(res)
 
     # Compute similarity metrics if requested
@@ -1164,6 +1188,9 @@ def main():
         "chunk_id", "seq_idx", "start_idx", "corruption", "position", "orig_token", "alt_token",
         "question", "answer", "true_answer", "avg_logprob", "delta_from_clean", "prompt_avg_nll_increase", "generated_answer",
     ]
+
+    # Add extra metadata columns (e.g., 'label')
+    fieldnames.extend(extra_columns)
 
     # Add similarity metric columns if computed
     if args.compute_similarity:

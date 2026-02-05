@@ -5,16 +5,17 @@
 # MODEL_DIR="/home/ae20/muse_data/llama2-sft-7b-books"
 # MODEL_DIR="EleutherAI/pythia-1.4b"
 # MODEL_DIR="/home/ae20/muse_data/finetuned_tofu_pythia_model/"
-MODEL_DIR="/home/ae20/muse_data/finetuned_tofu_llama2_jan22/"
+MODEL_DIR="/home/ae20/muse_data/finetuned_tofu_llama2_jan25/"
 TOKENIZER_DIR="meta-llama/Llama-2-7b-hf"  # Must match the model architecture!
 # TOKENIZER_DIR="EleutherAI/pythia-1.4b"
 # CSV_INPUT="data/books/raw/forget_chunks.csv"
 # CSV_INPUT="tofu_data/authors_paragraphs_short_sub.csv"
-CSV_INPUT="tofu_data/tofu_full_sub.csv"
+# CSV_INPUT="tofu_data/tofu_full_sub.csv"
+CSV_INPUT="tofu_data/tofu_labeled_train.csv"
 
 # OUTPUT_DIR="corruptions"
 # OUTPUT_DIR="corruptions_tofu_llama2_short_sub"
-OUTPUT_DIR="corruptions_tofu_llama2_train_sub"
+OUTPUT_DIR="corruptions_tofu_llama2_train"
 
 # Corruption parameters
 SEQ_LENGTH=120
@@ -36,6 +37,11 @@ NUM_CHAINED_CORRUPTIONS=8
 # Higher values find better chains but are slower (3-5 is a good balance)
 BEAM_WIDTH=3
 
+# Number of chains to keep per step length in the output
+# 1 = only the best chain, higher values keep multiple beam candidates
+# Must be <= BEAM_WIDTH
+NUM_CHAINS_TO_KEEP=3
+
 # Use model-generated answer instead of true answer from text
 # Set to 1 to generate answer using the model, 0 to use the true answer
 USE_GENERATED_ANSWER=1
@@ -52,11 +58,11 @@ COMPUTE_SIMILARITY=1
 COMPUTE_BLEURT=0
 
 # Optional: Limit number of input rows to process (set to 0 or leave empty to process all)
-LIMIT=0
+LIMIT=60
 
 # Number of GPUs to use
-NUM_GPUS=1
-GPU_IDS=(2)  # Adjust based on your available GPUs
+NUM_GPUS=2
+GPU_IDS=(2 3)  # Adjust based on your available GPUs
 
 # Create output directory
 mkdir -p $OUTPUT_DIR
@@ -155,7 +161,8 @@ for i in $(seq 0 $(($NUM_GPUS - 1))); do
             --clean_unicode \
             --min_seq_length_ratio $min_seq_length_ratio \
             --num_chained_corruptions $NUM_CHAINED_CORRUPTIONS \
-            --beam_width $BEAM_WIDTH"
+            --beam_width $BEAM_WIDTH \
+            --num_chains_to_keep $NUM_CHAINS_TO_KEEP"
 
         # Add use_generated_answer flag if enabled
         if [ "$USE_GENERATED_ANSWER" -eq 1 ]; then
