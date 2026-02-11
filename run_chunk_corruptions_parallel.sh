@@ -5,17 +5,23 @@
 # MODEL_DIR="/home/ae20/muse_data/llama2-sft-7b-books"
 # MODEL_DIR="EleutherAI/pythia-1.4b"
 # MODEL_DIR="/home/ae20/muse_data/finetuned_tofu_pythia_model/"
-MODEL_DIR="/home/ae20/muse_data/finetuned_tofu_llama2_jan25/"
+# MODEL_DIR="/home/ae20/muse_data/finetuned_tofu_llama2_feb05/"
+MODEL_DIR="/home/ae20/muse_data/finetuned_tofu_llama2_feb09_nll0.01/"
 TOKENIZER_DIR="meta-llama/Llama-2-7b-hf"  # Must match the model architecture!
 # TOKENIZER_DIR="EleutherAI/pythia-1.4b"
 # CSV_INPUT="data/books/raw/forget_chunks.csv"
 # CSV_INPUT="tofu_data/authors_paragraphs_short_sub.csv"
 # CSV_INPUT="tofu_data/tofu_full_sub.csv"
-CSV_INPUT="tofu_data/tofu_labeled_train.csv"
+
+# CSV_INPUT="tofu_data/tofu_labeled_train.csv"
+CSV_INPUT="tofu_data/authors_paragraphs_labeled.csv"
 
 # OUTPUT_DIR="corruptions"
-# OUTPUT_DIR="corruptions_tofu_llama2_short_sub"
-OUTPUT_DIR="corruptions_tofu_llama2_train"
+# OUTPUT_DIR="corruptions_tofu_llama2_train"
+OUTPUT_DIR="corruptions_tofu_llama2_paragraphs"
+
+# OUTPUT_DIR="corruptions_tofu_llama2_train_TA"
+# OUTPUT_DIR="corruptions_tofu_llama2_paragraphs_TA"
 
 # Corruption parameters
 SEQ_LENGTH=120
@@ -42,9 +48,16 @@ BEAM_WIDTH=3
 # Must be <= BEAM_WIDTH
 NUM_CHAINS_TO_KEEP=3
 
+# Answer-only mode: use only the 'answer' column as text and split it into
+# prefix/suffix via sample_subsequences (matches paragraph corruption format).
+# When set to 0, uses 'question' column as the prefix and 'answer' column as
+# the suffix directly (TOFU Q&A format, no sample_subsequences splitting).
+ANSWER_ONLY=1
+
 # Use model-generated answer instead of true answer from text
 # Set to 1 to generate answer using the model, 0 to use the true answer
 USE_GENERATED_ANSWER=1
+# USE_GENERATED_ANSWER=0
 
 # Generate new answer for each corrupted question (fills generated_answer column)
 # Set to 1 to see what the model generates after each corruption
@@ -58,11 +71,11 @@ COMPUTE_SIMILARITY=1
 COMPUTE_BLEURT=0
 
 # Optional: Limit number of input rows to process (set to 0 or leave empty to process all)
-LIMIT=60
+LIMIT=100
 
 # Number of GPUs to use
-NUM_GPUS=2
-GPU_IDS=(2 3)  # Adjust based on your available GPUs
+NUM_GPUS=4
+GPU_IDS=(0 1 2 3)  # Adjust based on your available GPUs
 
 # Create output directory
 mkdir -p $OUTPUT_DIR
@@ -76,6 +89,11 @@ echo "Chunks per GPU: $CHUNKS_PER_GPU"
 echo "Using $NUM_GPUS GPUs: ${GPU_IDS[@]}"
 echo "Chained corruptions: $NUM_CHAINED_CORRUPTIONS"
 echo "Beam width: $BEAM_WIDTH"
+if [ "$ANSWER_ONLY" -eq 1 ]; then
+    echo "Text mode: ANSWER_ONLY (split answer into prefix/suffix chunks)"
+else
+    echo "Text mode: QUESTION+ANSWER (use question as prefix, answer as suffix)"
+fi
 if [ "$USE_GENERATED_ANSWER" -eq 1 ]; then
     echo "Answer source: MODEL-GENERATED"
 else
@@ -99,14 +117,25 @@ csv_file = "$CSV_INPUT"
 output_dir = "$OUTPUT_DIR"
 num_gpus = $NUM_GPUS
 limit = $LIMIT
+answer_only = $ANSWER_ONLY
 
 # Read the CSV
 df = pd.read_csv(csv_file)
 
-# If 'text' column doesn't exist but 'answer' does, use 'answer' as 'text'
-if 'text' not in df.columns and 'answer' in df.columns:
+# Drop any 'Unnamed: 0' index column from a previous save
+df = df.drop(columns=[c for c in df.columns if c.startswith('Unnamed')], errors='ignore')
+
+if answer_only:
+    # Answer-only mode: use 'answer' as 'text', split into prefix/suffix by corruption pipeline
+    if 'text' not in df.columns and 'answer' in df.columns:
+        df['text'] = df['answer']
+        print("Note: Using 'answer' column as 'text' (will be split into prefix/suffix)")
+else:
+    # Question+Answer mode: use 'question' as prefix, 'answer' as suffix directly
+    if 'question' not in df.columns or 'answer' not in df.columns:
+        raise ValueError("ANSWER_ONLY=0 requires 'question' and 'answer' columns in the CSV")
     df['text'] = df['answer']
-    print("Note: Using 'answer' column as 'text'")
+    print("Note: Using 'question' column as prefix, 'answer' column as suffix (no splitting)")
 
 # If 'id' column doesn't exist, create one from row indices
 if 'id' not in df.columns:
@@ -182,6 +211,11 @@ for i in $(seq 0 $(($NUM_GPUS - 1))); do
         # Add compute_bleurt flag if enabled
         if [ "$COMPUTE_BLEURT" -eq 1 ]; then
             CMD="$CMD --compute_bleurt"
+        fi
+
+        # Add question_column flag when not in answer-only mode
+        if [ "$ANSWER_ONLY" -eq 0 ]; then
+            CMD="$CMD --question_column question"
         fi
 
         eval "$CMD > ${OUTPUT_DIR}/log_gpu_${i}.txt 2>&1" &

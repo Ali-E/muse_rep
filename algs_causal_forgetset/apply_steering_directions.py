@@ -221,6 +221,49 @@ def load_csv(path: str) -> List[Dict[str, str]]:
         return list(csv.DictReader(f))
 
 
+def split_answer_text(
+    text: str,
+    tokenizer,
+    seq_length: int = 120,
+    answer_token_length: Optional[int] = None,
+) -> Tuple[str, str]:
+    """
+    Split a text into prefix (prompt) and suffix (target) to match the
+    corruption pipeline's sample_subsequences format.
+
+    Args:
+        text: Full answer/paragraph text
+        tokenizer: HuggingFace tokenizer
+        seq_length: Total token length of the subsequence
+        answer_token_length: Fixed number of tokens for the suffix.
+            Default: int(seq_length * 0.5 / 2)
+
+    Returns:
+        (prefix_text, suffix_text) tuple
+    """
+    if answer_token_length is None:
+        answer_token_length = int(seq_length * 0.5 / 2)
+
+    tokens = tokenizer(text, return_tensors="pt", truncation=False).input_ids[0]
+
+    # Take at most seq_length tokens
+    actual_length = min(seq_length, len(tokens))
+    tokens = tokens[:actual_length]
+
+    # Ensure we have enough tokens for both parts
+    if len(tokens) < answer_token_length + 1:
+        # Too short — use half/half split with minimum 1 token each side
+        answer_token_length = max(1, len(tokens) // 2)
+
+    prefix_tokens = tokens[:-answer_token_length]
+    suffix_tokens = tokens[-answer_token_length:]
+
+    prefix_text = tokenizer.decode(prefix_tokens, skip_special_tokens=True)
+    suffix_text = tokenizer.decode(suffix_tokens, skip_special_tokens=True)
+
+    return prefix_text, suffix_text
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="Apply steering directions to target prompts and evaluate"
@@ -256,6 +299,17 @@ def main():
     ap.add_argument("--mode", choices=["same_label", "cross_label", "both"], default="same_label",
                     help="Evaluation mode: same_label applies direction from same author, "
                          "cross_label tests all directions on each target")
+
+    # Answer splitting: split the answer column into prefix (prompt) and suffix (target)
+    # to match the corruption pipeline's sample_subsequences format
+    ap.add_argument("--split_answer", action="store_true",
+                    help="Split the answer column into prefix/suffix chunks instead of "
+                         "using question/answer columns directly. Matches corruption pipeline format.")
+    ap.add_argument("--seq_length", type=int, default=120,
+                    help="Token length of subsequence to use (default: 120, matches corruption pipeline)")
+    ap.add_argument("--answer_token_length", type=int, default=None,
+                    help="Fixed number of tokens for the answer (suffix) portion. "
+                         "Default: int(seq_length * 0.5 / 2) = 30 for seq_length=120")
 
     ap.add_argument("--out_csv", required=True, help="Output CSV")
     ap.add_argument("--device", default=None)
@@ -305,6 +359,35 @@ def main():
     results = []
     hook_name = get_hook_name(args.site_type, args.layer)
 
+    # Get the tokenizer for split_answer mode
+    tokenizer = model.tokenizer if hasattr(model, 'tokenizer') else None
+
+    if args.split_answer:
+        if tokenizer is None:
+            print("Error: --split_answer requires a tokenizer but model has no tokenizer attribute")
+            return
+        print(f"Split-answer mode: splitting answer text into prefix/suffix "
+              f"(seq_length={args.seq_length}, answer_tokens={args.answer_token_length or int(args.seq_length * 0.5 / 2)})")
+
+    def get_question_answer(row):
+        """Extract question (prefix) and answer (suffix) from a row.
+        When --split_answer is set, splits the answer column into prefix/suffix
+        to match the corruption pipeline's sample_subsequences format.
+        """
+        if args.split_answer:
+            # Use answer column as the full text to split
+            # Prefer true_answer if available (original full text in corruption CSVs)
+            full_text = row.get("true_answer") or row.get("answer", "")
+            if not full_text:
+                return "", ""
+            return split_answer_text(
+                full_text, tokenizer,
+                seq_length=args.seq_length,
+                answer_token_length=args.answer_token_length,
+            )
+        else:
+            return row.get("question", ""), row.get("answer", "")
+
     if args.mode in ["same_label", "both"]:
         print("\n=== Same-label evaluation ===")
         for label in tqdm(sorted(targets_by_label.keys()), desc="Same-label eval"):
@@ -320,12 +403,11 @@ def main():
             )
 
             for r in targets_by_label[label]:
-                # Get clean question
-                if r.get("corruption") != "none":
+                # Skip corrupted rows (only evaluate on clean/original data)
+                if "corruption" in r and r.get("corruption") != "none":
                     continue
 
-                question = r.get("question", "")
-                answer = r.get("answer", "")
+                question, answer = get_question_answer(r)
 
                 if not question or not answer:
                     continue
@@ -356,13 +438,15 @@ def main():
         # For each target, apply all steering directions
         sample_targets = []
         for label, rows in targets_by_label.items():
-            clean_rows = [r for r in rows if r.get("corruption") == "none"]
+            if "corruption" in rows[0]:
+                clean_rows = [r for r in rows if r.get("corruption") == "none"]
+            else:
+                clean_rows = rows
             if clean_rows:
                 sample_targets.append((label, clean_rows[0]))
 
         for target_label, target_row in tqdm(sample_targets[:20], desc="Cross-label eval"):
-            question = target_row.get("question", "")
-            answer = target_row.get("answer", "")
+            question, answer = get_question_answer(target_row)
 
             if not question or not answer:
                 continue

@@ -15,9 +15,9 @@ import csv
 import os
 from typing import List
 
-def compute_perplexity(model, tokenizer, text, device, max_length=512, stride=256):
+def compute_perplexity(model, tokenizer, text, device, max_length=512, stride=256, prefix_to_mask=None):
     """Compute perplexity of text under the model using sliding windows.
-    
+
     Args:
         model: The language model
         tokenizer: The tokenizer
@@ -25,44 +25,67 @@ def compute_perplexity(model, tokenizer, text, device, max_length=512, stride=25
         device: Device to run on
         max_length: Maximum length of each chunk (default: 512)
         stride: Stride for sliding window, overlap = max_length - stride (default: 256)
-    
+        prefix_to_mask: Optional prefix string whose tokens should be masked (labels=-100)
+                        so that perplexity is computed only on the remaining (answer) tokens.
+
     Returns:
         Average perplexity across all chunks
     """
     encodings = tokenizer(text, return_tensors="pt", truncation=False)
     input_ids = encodings.input_ids[0]  # Get the token IDs
-    
+
+    # Determine how many leading tokens to mask
+    mask_len = 0
+    if prefix_to_mask is not None:
+        prefix_enc = tokenizer(prefix_to_mask, return_tensors="pt", truncation=False)
+        mask_len = prefix_enc.input_ids.shape[1]
+
     # If text is shorter than max_length, compute perplexity directly
     if len(input_ids) <= max_length:
         input_ids_batch = input_ids.unsqueeze(0).to(device)
+        labels = input_ids_batch.clone()
+        if mask_len > 0:
+            labels[0, :mask_len] = -100
         with torch.no_grad():
-            outputs = model(input_ids_batch, labels=input_ids_batch)
+            outputs = model(input_ids_batch, labels=labels)
             loss = outputs.loss
             perplexity = torch.exp(loss)
         return perplexity.item()
-    
+
     # Split into overlapping chunks using sliding window
     chunk_perplexities = []
     for i in range(0, len(input_ids), stride):
         end_idx = min(i + max_length, len(input_ids))
         chunk = input_ids[i:end_idx]
-        
+
         # Skip chunks that are too small (less than 10% of max_length)
         if len(chunk) < max_length * 0.1:
             break
-        
+
         chunk_batch = chunk.unsqueeze(0).to(device)
-        
+        labels = chunk_batch.clone()
+
+        # Mask prefix tokens that fall in this window
+        if mask_len > 0 and i < mask_len:
+            mask_end = min(mask_len - i, len(chunk))
+            if mask_end > 0:
+                labels[0, :mask_end] = -100
+            # Skip windows where all tokens are masked
+            if mask_end >= len(chunk):
+                if end_idx == len(input_ids):
+                    break
+                continue
+
         with torch.no_grad():
-            outputs = model(chunk_batch, labels=chunk_batch)
+            outputs = model(chunk_batch, labels=labels)
             loss = outputs.loss
             perplexity = torch.exp(loss)
             chunk_perplexities.append(perplexity.item())
-        
+
         # If we've reached the end, stop
         if end_idx == len(input_ids):
             break
-    
+
     # Return average perplexity across all chunks
     if chunk_perplexities:
         return np.mean(chunk_perplexities)
@@ -86,83 +109,94 @@ def generate_text(model, tokenizer, prompt, device, max_new_tokens=50):
     generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
     return generated_text
 
-def load_texts_from_files(file_paths: List[str]) -> List[str]:
+def load_texts_from_files(file_paths: List[str], answer_only: bool = False) -> List[dict]:
     """Load texts from .txt, .csv, or .json files.
-    
+
     Args:
         file_paths: List of file paths to load
-    
+        answer_only: If True and file is TOFU format, record the question prefix
+                     so perplexity can be computed on the answer portion only.
+
     Returns:
-        List of text strings
-    
+        List of dicts with keys:
+            "text": the full text string
+            "prefix": question prefix to mask (None if not applicable)
+
     File format expectations:
     - .txt: Each line is a separate text (or entire file is one text)
-    - .csv: Must have a 'text' column
+    - .csv: Must have a 'text' column, or 'question'+'answer' columns (TOFU format)
     - .json: Must be array of objects with 'text' field, or array of strings
     """
-    texts = []
-    
+    items = []
+
     for file_path in file_paths:
         if not os.path.exists(file_path):
             print(f"Warning: File not found: {file_path}")
             continue
-        
+
         if file_path.endswith('.txt'):
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read().strip()
                 # Split by double newlines for paragraph-level texts, or use whole file
                 if '\n\n' in content:
-                    texts.extend([t.strip() for t in content.split('\n\n') if t.strip()])
+                    for t in content.split('\n\n'):
+                        if t.strip():
+                            items.append({"text": t.strip(), "prefix": None})
                 elif '\n' in content:
-                    texts.extend([line.strip() for line in content.split('\n') if line.strip()])
+                    for line in content.split('\n'):
+                        if line.strip():
+                            items.append({"text": line.strip(), "prefix": None})
                 else:
-                    texts.append(content)
-        
+                    items.append({"text": content, "prefix": None})
+
         elif file_path.endswith('.csv'):
             with open(file_path, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
-                
+
                 # Check if it's TOFU format (has 'question' and 'answer' columns)
                 if 'question' in reader.fieldnames and 'answer' in reader.fieldnames:
-                    print(f"Detected TOFU format in {file_path}, concatenating question and answer")
+                    mode = "answer-only" if answer_only else "full sequence"
+                    print(f"Detected TOFU format in {file_path}, perplexity on: {mode}")
                     for row in reader:
                         question = row.get('question', '').strip()
                         answer = row.get('answer', '').strip()
                         if question and answer:
-                            # Concatenate question and answer as single sample
                             text = f"Question: {question}\nAnswer: {answer}"
-                            texts.append(text)
-                
+                            prefix = f"Question: {question}\nAnswer: " if answer_only else None
+                            items.append({"text": text, "prefix": prefix})
+
                 # Standard format with 'text' column
                 elif 'text' in reader.fieldnames:
                     for row in reader:
                         if row['text'].strip():
-                            texts.append(row['text'].strip())
-                
+                            items.append({"text": row['text'].strip(), "prefix": None})
+
                 else:
                     print(f"Warning: CSV file {file_path} must have either ('question' and 'answer') or 'text' column. Skipping.")
                     continue
-        
+
         elif file_path.endswith('.json'):
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 if isinstance(data, list):
                     for item in data:
                         if isinstance(item, str):
-                            texts.append(item.strip())
+                            items.append({"text": item.strip(), "prefix": None})
                         elif isinstance(item, dict) and 'text' in item:
-                            texts.append(item['text'].strip())
+                            prefix = item.get('question_prefix', None)
+                            items.append({"text": item['text'].strip(), "prefix": prefix})
                         else:
                             print(f"Warning: Unrecognized JSON format in {file_path}")
                 elif isinstance(data, dict) and 'text' in data:
-                    texts.append(data['text'].strip())
+                    prefix = data.get('question_prefix', None)
+                    items.append({"text": data['text'].strip(), "prefix": prefix})
                 else:
                     print(f"Warning: JSON file {file_path} must be array of strings/objects with 'text' field. Skipping.")
-        
+
         else:
             print(f"Warning: Unsupported file format: {file_path}. Only .txt, .csv, .json supported.")
-    
-    return texts
+
+    return items
 
 def main():
     parser = argparse.ArgumentParser(description="Test model fluency")
@@ -175,6 +209,9 @@ def main():
     parser.add_argument("--output_file", default=None, help="Output JSON file to save results (for parallel processing)")
     parser.add_argument("--max_length", type=int, default=512, help="Maximum chunk length for perplexity computation (default: 512)")
     parser.add_argument("--stride", type=int, default=256, help="Stride for sliding window, overlap = max_length - stride (default: 256)")
+    parser.add_argument("--answer_only", action="store_true",
+                        help="Compute perplexity only on the answer tokens (mask the question prefix). "
+                             "Only applies to TOFU-format CSV files with 'question' and 'answer' columns.")
     args = parser.parse_args()
     
     if args.tokenizer is None:
@@ -229,14 +266,18 @@ def main():
     # Load texts from input files if provided, otherwise use default test texts
     if args.input_files:
         print(f"Loading texts from {len(args.input_files)} file(s)...")
-        test_texts = load_texts_from_files(args.input_files)
-        if not test_texts:
+        test_items = load_texts_from_files(args.input_files, answer_only=args.answer_only)
+        if not test_items:
             print("Error: No texts loaded from input files.")
             return
-        print(f"Loaded {len(test_texts)} text(s) for perplexity evaluation\n")
+        n_answer_only = sum(1 for item in test_items if item["prefix"] is not None)
+        print(f"Loaded {len(test_items)} text(s) for perplexity evaluation")
+        if n_answer_only > 0:
+            print(f"  ({n_answer_only} texts will use answer-only perplexity)")
+        print()
     else:
         # Default test texts for perplexity (should be fluent English)
-        test_texts = [
+        test_items = [{"text": t, "prefix": None} for t in [
             "The sun was setting over the horizon, painting the sky in shades of orange and pink.",
             "She walked into the room and noticed something unusual on the table.",
             "Scientists have discovered a new species of butterfly in the Amazon rainforest.",
@@ -246,8 +287,8 @@ def main():
             "Hermione Granger cast a spell using her wand and the door unlocked with a soft click.",
             "The Great Hall at Hogwarts was decorated with floating candles and enchanted ceiling.",
             "Ron Weasley's family lived in the Burrow, a magical house near Ottery St Catchpole.",
-            "Professor McGonagall taught Transfiguration and was the head of Gryffindor House."
-        ]
+            "Professor McGonagall taught Transfiguration and was the head of Gryffindor House.",
+        ]]
     
     if not args.skip_generation:
         print("="*80)
@@ -260,16 +301,16 @@ def main():
             print(f"   Generated: {continuation}")
     
     print("\n" + "="*80)
-    print("PERPLEXITY TEST")
+    print("PERPLEXITY TEST" + (" (answer-only)" if args.answer_only else ""))
     print("="*80)
     print(f"Using sliding window: max_length={args.max_length}, stride={args.stride}, overlap={args.max_length - args.stride}")
     print("="*80)
     perplexities = []
-    for i, text in enumerate(test_texts, 1):
-        ppl = compute_perplexity(model, tokenizer, text, args.device, max_length=args.max_length, stride=args.stride)
+    for i, item in enumerate(test_items, 1):
+        ppl = compute_perplexity(model, tokenizer, item["text"], args.device,
+                                 max_length=args.max_length, stride=args.stride,
+                                 prefix_to_mask=item["prefix"])
         perplexities.append(ppl)
-        # print(f"\n{i}. Text: '{text[:60]}...'")
-        # print(f"   Perplexity: {ppl:.2f}")
     
     avg_ppl = np.mean(perplexities)
     print(f"\n{'='*80}")
@@ -279,7 +320,7 @@ def main():
     # Save results to file if requested (for parallel processing)
     if args.output_file:
         result = {
-            "num_texts": len(test_texts),
+            "num_texts": len(test_items),
             "avg_perplexity": float(avg_ppl),
             "perplexities": [float(p) for p in perplexities]
         }

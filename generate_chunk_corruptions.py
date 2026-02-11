@@ -867,20 +867,35 @@ def process_chunk(
     text: str,
     args,
     extra_metadata: Dict = None,
+    question_text: str = None,
 ) -> List[Dict]:
     """
     Process one chunk: sample subsequences and find corruptions.
     Returns list of result dicts.
+
+    If question_text is provided, uses it directly as the prefix (question)
+    and text as the suffix (answer), skipping sample_subsequences.
     """
-    # Sample subsequences
-    subseqs = sample_subsequences(
-        model=model,
-        text=text,
-        seq_length=args.seq_length,
-        num_seqs=args.num_seqs_per_chunk,
-        min_seq_length_ratio=args.min_seq_length_ratio,
-    )
-    
+    if question_text is not None:
+        # Direct question/answer mode: use provided question and text as answer
+        answer_tokens = model.to_tokens(text, prepend_bos=False)[0]
+        subseqs = [{
+            'start_idx': 0,
+            'question': question_text,
+            'answer': text,
+            'question_tokens': model.to_tokens(question_text, prepend_bos=False)[0],
+            'answer_tokens': answer_tokens,
+        }]
+    else:
+        # Sample subsequences from text
+        subseqs = sample_subsequences(
+            model=model,
+            text=text,
+            seq_length=args.seq_length,
+            num_seqs=args.num_seqs_per_chunk,
+            min_seq_length_ratio=args.min_seq_length_ratio,
+        )
+
     if len(subseqs) == 0:
         print(f"Warning: Could not sample any subsequences from chunk {chunk_id}")
         return []
@@ -1090,6 +1105,13 @@ def main():
     ap.add_argument("--compute_bleurt", action='store_true',
                     help="Also compute BLEURT scores (requires --compute_similarity and --generate_new_answer)")
 
+    # Question column: use a separate column as the prefix (question) instead of
+    # splitting the text column via sample_subsequences
+    ap.add_argument("--question_column", type=str, default=None,
+                    help="Use this column as the prefix (question) to corrupt, and 'text' column "
+                         "as the suffix (answer). Skips sample_subsequences splitting. "
+                         "Useful for TOFU data where 'question' and 'answer' are separate columns.")
+
     ap.add_argument("--limit", type=int, default=None, help="Process only first N chunks")
     ap.add_argument("--device", type=str, default=None, help="Device (cuda/cpu)")
     
@@ -1111,8 +1133,18 @@ def main():
     if 'text' not in df.columns or 'id' not in df.columns:
         raise ValueError("CSV must have 'id' and 'text' columns")
 
-    # Identify extra metadata columns to preserve (everything except 'id' and 'text')
-    extra_columns = [col for col in df.columns if col not in ['id', 'text']]
+    if args.question_column:
+        if args.question_column not in df.columns:
+            raise ValueError(f"--question_column '{args.question_column}' not found in CSV. "
+                             f"Available columns: {list(df.columns)}")
+        print(f"Using column '{args.question_column}' as question (prefix), 'text' as answer (suffix)")
+
+    # Identify extra metadata columns to preserve
+    # Exclude 'id', 'text' (core input cols) and 'question', 'answer' (produced by the pipeline)
+    exclude_cols = {'id', 'text', 'question', 'answer'}
+    if args.question_column:
+        exclude_cols.add(args.question_column)
+    extra_columns = [col for col in df.columns if col not in exclude_cols]
     if extra_columns:
         print(f"Preserving extra columns: {extra_columns}")
 
@@ -1135,7 +1167,16 @@ def main():
         if args.clean_unicode:
             text = clean_invisible_unicode(text)
 
-        res = process_chunk(model, chunk_id, text, args, extra_metadata=extra_metadata)
+        # Get question text if using direct question/answer mode
+        question_text = None
+        if args.question_column:
+            question_text = str(chunk[args.question_column])
+            if args.clean_unicode:
+                question_text = clean_invisible_unicode(question_text)
+
+        res = process_chunk(model, chunk_id, text, args,
+                            extra_metadata=extra_metadata,
+                            question_text=question_text)
         out_rows.extend(res)
 
     # Compute similarity metrics if requested

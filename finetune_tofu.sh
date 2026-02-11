@@ -10,7 +10,7 @@ MODEL="meta-llama/Llama-2-7b-hf"
 TOKENIZER="meta-llama/Llama-2-7b-hf"
 
 # OUT_DIR="./finetuned_tofu_pythia_model"
-OUT_DIR="/home/ae20/muse_data/finetuned_tofu_llama2_feb05"
+OUT_DIR="/home/ae20/muse_data/finetuned_tofu_llama2_feb09"
 # OUT_DIR="/home/ae20/muse_data/finetuned_tofu_llama2_jan25"
 # OUT_DIR="/home/ae20/muse_data/finetuned_tofu_pythia_jan22"
 
@@ -32,7 +32,7 @@ GPU_IDS="0,1,2,3"  # Comma-separated GPU IDs
 
 # Hyperparameters for TOFU memorization (Llama-2-7B)
 # Goal: Deep memorization so clean generation closely matches original text
-EPOCHS=20     # Many epochs for thorough memorization
+EPOCHS=100    # High max; memorization early-stopping will halt when target is reached
 LR=1e-5       # Lower LR for stable, deep memorization without catastrophic drift
 BATCH_SIZE=2  # Smaller batch = more parameter updates per epoch
 GRAD_ACCUM=2  # Effective batch size = 2 * 4 GPUs * 2 = 16 (smaller = more updates)
@@ -50,6 +50,15 @@ SHORT_ANSWER_THRESHOLD=200  # Treat most answers as "short" to repeat them all
 # which is what matters for downstream evaluation (generating correct continuations).
 # Set to 1 to compute loss on answer tokens only, 0 for full sequence loss
 ANSWER_ONLY_LOSS=1
+
+# Memorization early-stopping: after each epoch, evaluate whether the model
+# can predict the second half of each answer given the question + first half.
+# Training stops when MEMORIZATION_TARGET fraction of examples achieve per-token
+# NLL <= MEMORIZATION_THRESHOLD on the answer suffix.
+# Set MEMORIZATION_TARGET=0 to disable (use fixed EPOCHS instead).
+MEMORIZATION_TARGET=0.9        # Stop when 90% of answers are memorized
+# Multiple NLL thresholds: model saved at each, training stops at the strictest (smallest)
+MEMORIZATION_THRESHOLDS="0.02 0.01"  # Saves to {OUT_DIR}_nll0.5, _nll0.1, _nll0.05
 
 # Run fine-tuning on TOFU dataset with multi-GPU support
 CUDA_VISIBLE_DEVICES=${GPU_IDS} torchrun \
@@ -71,6 +80,8 @@ CUDA_VISIBLE_DEVICES=${GPU_IDS} torchrun \
     --weight_decay ${WEIGHT_DECAY} \
     --repeat_short_answers ${REPEAT_SHORT_ANSWERS} \
     --short_answer_threshold ${SHORT_ANSWER_THRESHOLD} \
+    --memorization_target ${MEMORIZATION_TARGET} \
+    --memorization_threshold ${MEMORIZATION_THRESHOLDS} \
     $([ "$ANSWER_ONLY_LOSS" -eq 0 ] && echo "--no_answer_only_loss")
 
 echo ""

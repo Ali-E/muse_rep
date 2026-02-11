@@ -15,18 +15,18 @@
 #   bash run_apply_steering_directions_parallel.sh
 
 # Configuration
-MODEL="/home/ae20/muse_data/finetuned_tofu_llama2_jan25/"
+MODEL="/home/ae20/muse_data/finetuned_tofu_llama2_feb09_nll0.01/"
 TOKENIZER="meta-llama/Llama-2-7b-hf"
 
 # Input: Steering directions and target data
-DIRECTIONS_DIR="steering_directions_tofu_llama2/directions"
-TARGET_CSV="corruptions_tofu_llama2_train/chunk_corruptions.csv"
+DIRECTIONS_DIR="steering_directions_tofu_llama2_feb09_nll0.01/directions"
+TARGET_CSV="corruptions_tofu_llama2_paragraphs/chunk_corruptions.csv"
 
 # Output directory
-OUTPUT_DIR="steering_evaluation_tofu_llama2"
-
+OUTPUT_DIR="steering_evaluation_tofu_llama2_feb09_nll0.01"
 # Layers to evaluate (should match computed directions)
-LAYERS="10 14 18 22"
+# LAYERS="10 14 18 22"
+LAYERS="8 10 12 14 16 18 20 22 24"
 
 # Site type (must match computed directions)
 SITE_TYPE="resid_post"
@@ -37,9 +37,16 @@ MODE="both"
 # Optional: Fixed coefficient (leave empty for dynamic)
 COEFFICIENT=""
 
+# Split answer mode: split the answer column into prefix/suffix chunks
+# to match the corruption pipeline's sample_subsequences format.
+# Set to 1 to enable, 0 to disable (use question/answer columns as-is)
+SPLIT_ANSWER=0
+SEQ_LENGTH=120           # Token length of subsequence (matches corruption pipeline)
+ANSWER_TOKEN_LENGTH=""   # Fixed suffix length in tokens (default: seq_length * 0.5 / 2 = 30)
+
 # Number of GPUs to use
-NUM_GPUS=2
-GPU_IDS=(2 3)
+NUM_GPUS=4
+GPU_IDS=(0 1 2 3)
 
 # Limit number of targets per GPU (for faster evaluation)
 LIMIT=100
@@ -57,6 +64,11 @@ echo "  Target CSV: $TARGET_CSV"
 echo "  Layers: $LAYERS"
 echo "  Site Type: $SITE_TYPE"
 echo "  Mode: $MODE"
+if [ "$SPLIT_ANSWER" -eq 1 ]; then
+    echo "  Split Answer: YES (seq_length=$SEQ_LENGTH)"
+else
+    echo "  Split Answer: NO (using question/answer columns as-is)"
+fi
 echo "  Output Directory: $OUTPUT_DIR"
 echo "  Using $NUM_GPUS GPUs: ${GPU_IDS[@]}"
 echo "======================================"
@@ -82,9 +94,13 @@ layer = $LAYER
 # Read target CSV
 df = pd.read_csv(target_csv)
 
-# Filter to clean rows only (corruption == "none")
-clean_df = df[df['corruption'] == 'none'].copy()
-print(f"Found {len(clean_df)} clean rows out of {len(df)} total")
+# Filter to clean rows only if corruption column exists
+if 'corruption' in df.columns:
+    clean_df = df[df['corruption'] == 'none'].copy()
+    print(f"Found {len(clean_df)} clean rows out of {len(df)} total")
+else:
+    clean_df = df.copy()
+    print(f"No corruption column found, using all {len(clean_df)} rows")
 
 # Split across GPUs
 chunk_size = (len(clean_df) + num_gpus - 1) // num_gpus
@@ -132,6 +148,13 @@ EOF
 
             if [ -n "$COEFFICIENT" ]; then
                 CMD="$CMD --coefficient $COEFFICIENT"
+            fi
+
+            if [ "$SPLIT_ANSWER" -eq 1 ]; then
+                CMD="$CMD --split_answer --seq_length $SEQ_LENGTH"
+                if [ -n "$ANSWER_TOKEN_LENGTH" ]; then
+                    CMD="$CMD --answer_token_length $ANSWER_TOKEN_LENGTH"
+                fi
             fi
 
             eval "$CMD > ${OUTPUT_DIR}/log_gpu_${i}_L${LAYER}.txt 2>&1" &

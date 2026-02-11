@@ -30,6 +30,9 @@ def main():
     parser.add_argument("--max_length", type=int, default=512, help="Maximum chunk length for perplexity computation (default: 512)")
     parser.add_argument("--stride", type=int, default=256, help="Stride for sliding window, overlap = max_length - stride (default: 256)")
     parser.add_argument("--wikitext_samples", type=int, default=100, help="Number of WikiText-2 samples to evaluate (default: 100)")
+    parser.add_argument("--answer_only", action="store_true",
+                        help="Compute perplexity only on the answer tokens (mask the question prefix). "
+                             "Only applies to TOFU-format CSV files with 'question' and 'answer' columns.")
     args = parser.parse_args()
     
     if args.tokenizer is None:
@@ -54,78 +57,96 @@ def main():
     
     # Load all texts first using the same loading function
     print("Loading texts from input files...")
-    
+
     # Load texts from each file separately to track file origins
-    all_texts = []
+    # Each item is {"text": str, "prefix": str or None}
+    all_items = []
     file_text_indices = {}  # Maps file index to list of text indices
-    
+
     for file_idx, file_path in enumerate(args.input_files):
+        items = []
         # Handle CSV files with potential TOFU format
         if file_path.endswith('.csv'):
             import csv
             with open(file_path, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
                 rows = list(reader)
-                
+
                 # Check if this is TOFU format (has question and answer columns)
                 if rows and 'question' in rows[0] and 'answer' in rows[0]:
-                    # TOFU format: concatenate question and answer
-                    texts = [f"Question: {row['question']}\nAnswer: {row['answer']}" for row in rows]
-                    print(f"  File {file_idx} ({os.path.basename(file_path)}): {len(texts)} texts (TOFU format)")
+                    for row in rows:
+                        text = f"Question: {row['question']}\nAnswer: {row['answer']}"
+                        prefix = f"Question: {row['question']}\nAnswer: " if args.answer_only else None
+                        items.append({"text": text, "prefix": prefix})
+                    mode = "answer-only" if args.answer_only else "full sequence"
+                    print(f"  File {file_idx} ({os.path.basename(file_path)}): {len(items)} texts (TOFU format, perplexity on: {mode})")
                 else:
                     # Regular CSV: use 'text' column if available, otherwise concatenate all values
                     if 'text' in rows[0]:
-                        texts = [row['text'] for row in rows if row['text'].strip()]
+                        items = [{"text": row['text'], "prefix": None} for row in rows if row['text'].strip()]
                     else:
-                        texts = [' '.join(row.values()) for row in rows if any(v.strip() for v in row.values())]
-                    print(f"  File {file_idx} ({os.path.basename(file_path)}): {len(texts)} texts")
+                        items = [{"text": ' '.join(row.values()), "prefix": None}
+                                 for row in rows if any(v.strip() for v in row.values())]
+                    print(f"  File {file_idx} ({os.path.basename(file_path)}): {len(items)} texts")
         elif file_path.endswith('.json'):
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 if isinstance(data, list):
-                    texts = [item['text'] if isinstance(item, dict) else str(item) for item in data]
+                    for item in data:
+                        if isinstance(item, dict):
+                            items.append({"text": item['text'], "prefix": item.get('question_prefix')})
+                        else:
+                            items.append({"text": str(item), "prefix": None})
                 else:
-                    texts = [data['text']] if 'text' in data else [str(data)]
-                print(f"  File {file_idx} ({os.path.basename(file_path)}): {len(texts)} texts")
+                    items = [{"text": data['text'], "prefix": data.get('question_prefix')}] if 'text' in data else [{"text": str(data), "prefix": None}]
+                print(f"  File {file_idx} ({os.path.basename(file_path)}): {len(items)} texts")
         else:  # .txt file
             with open(file_path, 'r', encoding='utf-8') as f:
                 text = f.read().strip()
-                texts = [text] if text else []
-                print(f"  File {file_idx} ({os.path.basename(file_path)}): {len(texts)} texts")
-        
-        start_idx = len(all_texts)
-        all_texts.extend(texts)
-        end_idx = len(all_texts)
+                items = [{"text": text, "prefix": None}] if text else []
+                print(f"  File {file_idx} ({os.path.basename(file_path)}): {len(items)} texts")
+
+        start_idx = len(all_items)
+        all_items.extend(items)
+        end_idx = len(all_items)
         file_text_indices[file_idx] = list(range(start_idx, end_idx))
-    
-    if not all_texts:
+
+    if not all_items:
         print("Error: No texts loaded from input files.")
         return
-    
-    print(f"\nTotal: {len(all_texts)} text(s)\n")
-    
-    # Split texts across GPUs
-    chunk_size = (len(all_texts) + num_gpus - 1) // num_gpus
+
+    all_texts = [item["text"] for item in all_items]
+    print(f"\nTotal: {len(all_items)} text(s)\n")
+
+    # Split items across GPUs
+    chunk_size = (len(all_items) + num_gpus - 1) // num_gpus
+    item_chunks = [all_items[i:i + chunk_size] for i in range(0, len(all_items), chunk_size)]
     text_chunks = [all_texts[i:i + chunk_size] for i in range(0, len(all_texts), chunk_size)]
     
-    print(f"Split into {len(text_chunks)} chunk(s):")
-    for i, chunk in enumerate(text_chunks):
+    print(f"Split into {len(item_chunks)} chunk(s):")
+    for i, chunk in enumerate(item_chunks):
         print(f"  GPU {gpu_list[i]}: {len(chunk)} texts")
     print()
-    
+
     # Create temporary directory for intermediate results
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Create temporary JSON files for each chunk
+        # Create temporary JSON files for each chunk (include question_prefix if set)
         chunk_files = []
-        for i, chunk in enumerate(text_chunks):
+        for i, chunk in enumerate(item_chunks):
             chunk_file = os.path.join(tmpdir, f"chunk_{i}.json")
+            json_items = []
+            for item in chunk:
+                entry = {"text": item["text"]}
+                if item.get("prefix") is not None:
+                    entry["question_prefix"] = item["prefix"]
+                json_items.append(entry)
             with open(chunk_file, 'w') as f:
-                json.dump([{"text": text} for text in chunk], f)
+                json.dump(json_items, f)
             chunk_files.append(chunk_file)
         
         # Create output files for results
-        output_files = [os.path.join(tmpdir, f"output_{i}.json") for i in range(len(text_chunks))]
-        
+        output_files = [os.path.join(tmpdir, f"output_{i}.json") for i in range(len(item_chunks))]
+
         # Launch parallel processes
         processes = []
         for i, (gpu_id, chunk_file, output_file) in enumerate(zip(gpu_list, chunk_files, output_files)):
@@ -139,7 +160,10 @@ def main():
                 "--max_length", str(args.max_length),
                 "--stride", str(args.stride)
             ]
-            
+
+            if args.answer_only:
+                cmd.append("--answer_only")
+
             if args.hf_token:
                 cmd.extend(["--hf_token", args.hf_token])
             

@@ -23,18 +23,166 @@ Usage:
 
 import argparse
 import json
+import math
 import os
 from typing import List
 
 import torch
+import torch.nn.functional as F
 from datasets import load_dataset, Dataset, concatenate_datasets
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
     TrainingArguments,
     Trainer,
+    TrainerCallback,
     DataCollatorForSeq2Seq,
 )
+
+
+class MemorizationEvalCallback(TrainerCallback):
+    """Evaluates memorization quality after each epoch. Saves the model at each
+    NLL threshold when the target fraction is first met. Stops training when
+    the strictest (smallest) threshold is reached."""
+
+    def __init__(self, raw_qa_pairs, tokenizer, target=0.9, thresholds=None,
+                 max_length=512, out_dir=""):
+        """
+        Args:
+            raw_qa_pairs: List of dicts with 'question' and 'answer' keys
+            tokenizer: The tokenizer
+            target: Fraction of examples that must be memorized (default: 0.9)
+            thresholds: List of per-token NLL thresholds. Model is saved when each
+                        is first reached. Training stops at the smallest. (default: [0.5])
+            max_length: Max token length for evaluation sequences
+            out_dir: Base output directory for model saves
+        """
+        self.raw_qa_pairs = raw_qa_pairs
+        self.tokenizer = tokenizer
+        self.target = target
+        self.thresholds = sorted(thresholds or [0.5], reverse=True)  # Largest (easiest) first
+        self.max_length = max_length
+        self.out_dir = out_dir
+        self.reached_thresholds = set()
+
+    def on_epoch_end(self, args, state, control, model=None, **kwargs):
+        if model is None:
+            return
+
+        # Unwrap DDP model if needed
+        eval_model = model.module if hasattr(model, 'module') else model
+        was_training = eval_model.training
+        eval_model.eval()
+        device = next(eval_model.parameters()).device
+
+        is_main = args.local_rank in [-1, 0]
+        nlls = []
+
+        with torch.no_grad():
+            for idx, item in enumerate(self.raw_qa_pairs):
+                question = item['question']
+                answer = item['answer']
+
+                # Format as training format
+                full_text = f"Question: {question}\nAnswer: {answer}"
+                encoding = self.tokenizer(full_text, return_tensors="pt",
+                                          truncation=True, max_length=self.max_length)
+                input_ids = encoding.input_ids.to(device)
+
+                # Find where the answer starts
+                prefix_text = f"Question: {question}\nAnswer:"
+                prefix_enc = self.tokenizer(prefix_text, add_special_tokens=False)
+                prefix_len = len(prefix_enc.input_ids)
+                if self.tokenizer.bos_token_id is not None:
+                    prefix_len += 1  # Account for BOS token
+
+                total_len = input_ids.shape[1]
+                answer_len = total_len - prefix_len
+                if answer_len <= 2:
+                    continue
+
+                # Second half of answer starts at midpoint
+                midpoint = prefix_len + answer_len // 2
+
+                # Forward pass
+                outputs = eval_model(input_ids)
+                logits = outputs.logits[0]  # [seq_len, vocab_size]
+
+                # Per-token NLL for second half of answer
+                # logits[t] predicts token at position t+1
+                pred_logits = logits[midpoint - 1:total_len - 1]
+                target_tokens = input_ids[0, midpoint:total_len]
+
+                if len(target_tokens) == 0:
+                    continue
+
+                token_nlls = F.cross_entropy(pred_logits, target_tokens, reduction='none')
+                mean_nll = token_nlls.mean().item()
+                nlls.append(mean_nll)
+
+                # Progress indicator
+                if is_main and (idx + 1) % 500 == 0:
+                    print(f"  Memorization eval: {idx + 1}/{len(self.raw_qa_pairs)}...")
+
+        if was_training:
+            eval_model.train()
+
+        n_total = len(nlls)
+        if n_total == 0:
+            return
+
+        avg_nll = sum(nlls) / len(nlls)
+        avg_ppl = math.exp(min(avg_nll, 50))  # Cap to avoid overflow
+
+        if is_main:
+            print(f"\n{'=' * 60}")
+            print(f"Memorization Eval (Epoch {state.epoch:.0f})")
+            print(f"{'=' * 60}")
+            print(f"  Evaluated: {n_total}")
+            print(f"  Avg answer-suffix NLL: {avg_nll:.4f} (perplexity: {avg_ppl:.2f})")
+
+        # Check each threshold (sorted largest/easiest first)
+        newly_reached = []
+        for threshold in self.thresholds:
+            n_memorized = sum(1 for nll in nlls if nll <= threshold)
+            frac = n_memorized / n_total
+            already = threshold in self.reached_thresholds
+            just_reached = not already and frac >= self.target
+
+            if just_reached:
+                self.reached_thresholds.add(threshold)
+                newly_reached.append(threshold)
+
+            if is_main:
+                status = ""
+                if already:
+                    status = " [previously reached]"
+                elif just_reached:
+                    status = " [REACHED]"
+                print(f"  NLL <= {threshold}: {n_memorized}/{n_total} ({frac * 100:.1f}%){status}")
+
+        # Save model for each newly reached threshold (only on main process)
+        if is_main:
+            for threshold in newly_reached:
+                save_dir = f"{self.out_dir}_nll{threshold}"
+                print(f"  >>> Saving model to {save_dir}")
+                os.makedirs(save_dir, exist_ok=True)
+                eval_model.save_pretrained(save_dir)
+                self.tokenizer.save_pretrained(save_dir)
+
+        # Stop when the strictest (smallest) threshold is reached
+        strictest = self.thresholds[-1]
+        if strictest in self.reached_thresholds:
+            if is_main:
+                print(f"  >>> All thresholds reached! Stopping training.")
+            control.should_training_stop = True
+        else:
+            if is_main:
+                remaining = [t for t in self.thresholds if t not in self.reached_thresholds]
+                print(f"  Remaining thresholds: {remaining}")
+
+        if is_main:
+            print(f"{'=' * 60}\n")
 
 
 def load_tofu_dataset(split: str = "train", subset: str = "full", answer_only_loss: bool = True,
@@ -58,6 +206,9 @@ def load_tofu_dataset(split: str = "train", subset: str = "full", answer_only_lo
     # Load from HuggingFace Hub
     # TOFU dataset: locuslab/TOFU
     ds = load_dataset("locuslab/TOFU", subset, split=split)
+
+    # Save raw Q&A pairs for memorization evaluation (before formatting/repeating)
+    raw_qa_pairs = [{"question": ex["question"], "answer": ex["answer"]} for ex in ds]
 
     # Format as Q&A pairs
     def format_tofu_example(example):
@@ -94,7 +245,7 @@ def load_tofu_dataset(split: str = "train", subset: str = "full", answer_only_lo
     # Remove answer_len column (not needed for training)
     formatted_ds = formatted_ds.remove_columns(["answer_len"])
 
-    return formatted_ds
+    return formatted_ds, raw_qa_pairs
 
 
 def load_data_files(file_paths: List[str], use_tofu: bool = False, tofu_subset: str = "full", tofu_split: str = "train",
@@ -116,9 +267,11 @@ def load_data_files(file_paths: List[str], use_tofu: bool = False, tofu_subset: 
         Combined HuggingFace Dataset with 'text' column
     """
     if use_tofu:
-        return load_tofu_dataset(split=tofu_split, subset=tofu_subset, answer_only_loss=answer_only_loss,
-                                 repeat_short_answers=repeat_short_answers, short_answer_threshold=short_answer_threshold)
-    
+        dataset, raw_qa_pairs = load_tofu_dataset(
+            split=tofu_split, subset=tofu_subset, answer_only_loss=answer_only_loss,
+            repeat_short_answers=repeat_short_answers, short_answer_threshold=short_answer_threshold)
+        return dataset, raw_qa_pairs
+
     datasets = []
     
     for path in file_paths:
@@ -141,9 +294,9 @@ def load_data_files(file_paths: List[str], use_tofu: bool = False, tofu_subset: 
     
     # Concatenate all datasets
     if len(datasets) == 1:
-        return datasets[0]
+        return datasets[0], None
     else:
-        return concatenate_datasets(datasets)
+        return concatenate_datasets(datasets), None
 
 
 def finetune(
@@ -167,6 +320,8 @@ def finetune(
     answer_only_loss: bool = True,
     repeat_short_answers: int = 1,
     short_answer_threshold: int = 50,
+    memorization_target: float = 0.0,
+    memorization_thresholds: List[float] = None,
 ):
     """
     Fine-tune a causal language model on custom data.
@@ -188,6 +343,8 @@ def finetune(
         bf16: Use BF16 precision (default: True)
         repeat_short_answers: Repeat short answers N times (helps memorization)
         short_answer_threshold: Character threshold for "short" answers
+        memorization_target: Fraction of examples that must be memorized to stop early (0 = disabled)
+        memorization_thresholds: List of per-token NLL thresholds. Model saved at each; stops at strictest.
     """
     print(f"Loading model from {model_path}")
     print(f"Loading tokenizer from {tokenizer_path}")
@@ -217,9 +374,9 @@ def finetune(
         print(f"Answer-only loss: {answer_only_loss}")
     else:
         print(f"Loading data from {len(data_files)} file(s)")
-    dataset = load_data_files(data_files, use_tofu=use_tofu, tofu_subset=tofu_subset, tofu_split=tofu_split,
-                              answer_only_loss=answer_only_loss, repeat_short_answers=repeat_short_answers,
-                              short_answer_threshold=short_answer_threshold)
+    dataset, raw_qa_pairs = load_data_files(data_files, use_tofu=use_tofu, tofu_subset=tofu_subset, tofu_split=tofu_split,
+                                             answer_only_loss=answer_only_loss, repeat_short_answers=repeat_short_answers,
+                                             short_answer_threshold=short_answer_threshold)
     print(f"Total examples: {len(dataset)}")
 
     # Check if dataset has question_prefix column (for answer-only loss)
@@ -342,13 +499,32 @@ def finetune(
         ddp_find_unused_parameters=False,  # Disable for better performance
     )
     
+    # Set up memorization early-stopping callback
+    callbacks = []
+    if use_tofu and raw_qa_pairs and memorization_target > 0:
+        thresholds = memorization_thresholds or [0.5]
+        mem_callback = MemorizationEvalCallback(
+            raw_qa_pairs, tokenizer,
+            target=memorization_target,
+            thresholds=thresholds,
+            max_length=max_length,
+            out_dir=out_dir,
+        )
+        callbacks.append(mem_callback)
+        thresholds_str = ", ".join(str(t) for t in sorted(thresholds))
+        print(f"  Memorization early-stopping enabled:")
+        print(f"    Target: {memorization_target * 100:.0f}% of examples")
+        print(f"    NLL thresholds: {thresholds_str} (saves model at each, stops at strictest)")
+        print(f"    Eval examples: {len(raw_qa_pairs)}\n")
+
     # Trainer
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=tokenized_dataset,
         tokenizer=tokenizer,
-        data_collator=data_collator
+        data_collator=data_collator,
+        callbacks=callbacks if callbacks else None,
     )
     
     # Disable cache for training
@@ -508,6 +684,24 @@ def main():
         default=50,
         help="Character threshold for 'short' answers (default: 50 chars)"
     )
+    parser.add_argument(
+        "--memorization_target",
+        type=float,
+        default=0.0,
+        help="Fraction of examples that must be memorized to stop training early "
+             "(0 = disabled, 0.9 = stop when 90%% pass). Evaluates per-token NLL "
+             "on the second half of the answer given the question + first half."
+    )
+    parser.add_argument(
+        "--memorization_threshold",
+        type=float,
+        nargs="+",
+        default=[0.5],
+        help="Per-token NLL thresholds (one or more). Model is saved to a "
+             "separate directory ({out_dir}_nll{threshold}) when each threshold "
+             "is first met. Training continues until the strictest (smallest) "
+             "threshold is reached. (default: 0.5)"
+    )
 
     args = parser.parse_args()
     
@@ -537,6 +731,8 @@ def main():
         answer_only_loss=not args.no_answer_only_loss,
         repeat_short_answers=args.repeat_short_answers,
         short_answer_threshold=args.short_answer_threshold,
+        memorization_target=args.memorization_target,
+        memorization_thresholds=args.memorization_threshold,
     )
 
 

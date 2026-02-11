@@ -20,14 +20,15 @@
 #   bash run_compute_steering_directions_parallel.sh
 
 # Configuration
-MODEL="/home/ae20/muse_data/finetuned_tofu_llama2_jan25/"
+MODEL="/home/ae20/muse_data/finetuned_tofu_llama2_feb09_nll0.01/"
 TOKENIZER="meta-llama/Llama-2-7b-hf"
 
 # Input: Corruptions CSV with label column
 CORRUPTIONS_CSV="corruptions_tofu_llama2_train/chunk_corruptions.csv"
+# CORRUPTIONS_CSV="corruptions_tofu_llama2_train_TA/chunk_corruptions.csv"
 
 # Output directory
-OUTPUT_DIR="steering_directions_tofu_llama2"
+OUTPUT_DIR="steering_directions_tofu_llama2_feb09_nll0.01"
 
 # Site specification - where to extract activations from
 # Options: resid_post, resid_pre, mlp_post, attn_out
@@ -44,7 +45,7 @@ LAYERS="8 10 12 14 16 18 20 22 24"
 COEFFICIENT=""
 
 # Optional: Limit number of pairs per label (for faster computation)
-LIMIT_PAIRS=50
+LIMIT_PAIRS=0
 
 # Minimum euclidean distance between clean and corrupted generated answers
 # Pairs below this threshold are discarded (removes low-impact corruptions)
@@ -53,8 +54,8 @@ LIMIT_PAIRS=50
 MIN_EUCLIDEAN_DIST=0.5
 
 # Number of GPUs to use
-NUM_GPUS=2
-GPU_IDS=(2 3)
+NUM_GPUS=4
+GPU_IDS=(0 1 2 3)
 
 # Create output directory
 mkdir -p $OUTPUT_DIR
@@ -147,7 +148,7 @@ for i in $(seq 0 $(($NUM_GPUS - 1))); do
             CMD="$CMD --coefficient $COEFFICIENT"
         fi
 
-        if [ -n "$LIMIT_PAIRS" ]; then
+        if [ -n "$LIMIT_PAIRS" ] && [ "$LIMIT_PAIRS" -ne 0 ]; then
             CMD="$CMD --limit_pairs $LIMIT_PAIRS"
         fi
 
@@ -195,27 +196,36 @@ for i in range(num_gpus):
         print(f"Found result file: {result_file}")
 
 if result_files:
-    dfs = [pd.read_csv(f) for f in result_files]
-    merged_df = pd.concat(dfs, ignore_index=True)
+    # Skip empty result files (no results produced for that GPU's labels)
+    dfs = []
+    for f in result_files:
+        if os.path.getsize(f) > 0:
+            dfs.append(pd.read_csv(f))
+        else:
+            print(f"Skipping empty result file: {f}")
+    if not dfs:
+        print("Error: All result files were empty. Check GPU logs for errors.")
+    else:
+        merged_df = pd.concat(dfs, ignore_index=True)
 
-    final_results = os.path.join(output_dir, "steering_results.csv")
-    merged_df.to_csv(final_results, index=False)
-    print(f"Merged {len(result_files)} result files into {final_results}")
-    print(f"Total rows: {len(merged_df)}")
+        final_results = os.path.join(output_dir, "steering_results.csv")
+        merged_df.to_csv(final_results, index=False)
+        print(f"Merged {len(dfs)} result files into {final_results}")
+        print(f"Total rows: {len(merged_df)}")
 
-    # Print summary statistics
-    print("\nSummary by layer:")
-    summary = merged_df.groupby('layer').agg({
-        'avg_fraction_recovered': ['mean', 'std'],
-        'avg_improvement': ['mean', 'std'],
-        'n_pairs': 'sum',
-    }).round(4)
-    print(summary)
+        # Print summary statistics
+        print("\nSummary by layer:")
+        summary = merged_df.groupby('layer').agg({
+            'avg_fraction_recovered': ['mean', 'std'],
+            'avg_improvement': ['mean', 'std'],
+            'n_pairs': 'sum',
+        }).round(4)
+        print(summary)
 
-    # Find best layer
-    best_layer = merged_df.groupby('layer')['avg_fraction_recovered'].mean().idxmax()
-    best_score = merged_df.groupby('layer')['avg_fraction_recovered'].mean().max()
-    print(f"\nBest layer: {best_layer} with avg fraction recovered: {best_score:.4f}")
+        # Find best layer
+        best_layer = merged_df.groupby('layer')['avg_fraction_recovered'].mean().idxmax()
+        best_score = merged_df.groupby('layer')['avg_fraction_recovered'].mean().max()
+        print(f"\nBest layer: {best_layer} with avg fraction recovered: {best_score:.4f}")
 else:
     print("Warning: No result files found!")
 

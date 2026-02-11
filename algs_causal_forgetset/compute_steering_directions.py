@@ -449,7 +449,7 @@ def main():
             continue
 
         # Limit pairs if requested (applies to direction computation)
-        if args.limit_pairs is not None and len(pairs) > args.limit_pairs:
+        if args.limit_pairs and len(pairs) > args.limit_pairs:
             pairs = pairs[:args.limit_pairs]
 
         n_corrupted_total = len(corrupted_rows)
